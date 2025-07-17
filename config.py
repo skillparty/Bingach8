@@ -3,58 +3,78 @@ Archivo de configuración para el juego Bingacho
 """
 
 # Configuración de la pantalla
-WIDTH = 1024
-HEIGHT = 768
+WIDTH = 3456
+HEIGHT = 2234
+FULLSCREEN = True
 TITLE = "Bingacho"
 
-# Colores (esquema retro Vegas con paleta moderna)
+# Colores - Nueva paleta moderna
 WHITE = (255, 255, 255)  # Blanco puro para fondo
 BLACK = (0, 0, 0)        # Negro para algunos textos
 
-# Colores principales - paleta sugerida
-VEGAS_RED = (40, 0, 0)    # Rojo oscuro profundo
-VEGAS_GOLD = (255, 215, 0)  # Dorado brillante
-VEGAS_YELLOW = (255, 255, 0)  # Amarillo
-VEGAS_SILVER = (192, 192, 192)  # Plateado
-VEGAS_WHITE = (255, 255, 255)  # Blanco
-VEGAS_ORANGE = (255, 165, 0)  # Naranja
+# Nueva paleta de colores elegante y moderna
+COLORS = {
+    'BACKGROUND': (15, 23, 42),       # Slate 900 #0F172A
+    'PRIMARY': (99, 102, 241),        # Indigo 500 #6366F1
+    'SECONDARY': (236, 72, 153),      # Pink 500 #EC4899
+    'ACCENT': (34, 197, 94),          # Green 500 #22C55E
+    'HIGHLIGHT': (251, 191, 36),      # Amber 400 #FBBF24
+    'WHITE': (248, 250, 252),         # Slate 50 #F8FAFC
+    'BLACK': (15, 23, 42),            # Slate 900 #0F172A
+    'GRAY': (100, 116, 139),          # Slate 500 #64748B
+    'LIGHT_GRAY': (203, 213, 225),    # Slate 300 #CBD5E1
+    'DARK_GRAY': (51, 65, 85)         # Slate 700 #334155
+}
 
-# Referencias directas para el código
-BUTTON_COLOR = (180, 0, 0)  # Rojo brillante para botones
-BUTTON_HOVER_COLOR = (220, 60, 0)  # Naranja rojizo para hover de botones
-GLOW_COLOR = VEGAS_GOLD     # Dorado para brillos
-ALT_GLOW_COLOR = VEGAS_YELLOW  # Amarillo para brillos alternativos
-BORDER_COLOR = VEGAS_ORANGE  # Naranja para bordes
-FRAME_COLOR = VEGAS_SILVER  # Plateado para marcos
-TEXT_COLOR = WHITE          # Blanco para texto
+# Mapeo de colores para compatibilidad
+BACKGROUND_COLOR = COLORS['BACKGROUND']
+PRIMARY_COLOR = COLORS['PRIMARY']
+SECONDARY_COLOR = COLORS['SECONDARY']
+ACCENT_COLOR = COLORS['ACCENT']
+HIGHLIGHT_COLOR = COLORS['HIGHLIGHT']
+WHITE = COLORS['WHITE']
+BLACK = COLORS['BLACK']
+GRAY = COLORS['GRAY']
+LIGHT_GRAY = COLORS['LIGHT_GRAY']
+DARK_GRAY = COLORS['DARK_GRAY']
+
+# Colores específicos para elementos del juego
+BUTTON_COLOR = PRIMARY_COLOR
+BUTTON_HOVER_COLOR = SECONDARY_COLOR
+TEXT_COLOR = WHITE
+SUBTITLE_COLOR = HIGHLIGHT_COLOR
+BORDER_COLOR = ACCENT_COLOR
+GLOW_COLOR = PRIMARY_COLOR
+ALT_GLOW_COLOR = COLORS['ACCENT']
+FRAME_COLOR = COLORS['PRIMARY']
 
 # Sistema de colores para el juego
-PRIMARY = VEGAS_RED           # Color principal
-PRIMARY_LIGHT = (180, 0, 0) # Rojo más claro
-PRIMARY_DARK = (20, 0, 0)   # Rojo más oscuro
+PRIMARY = PRIMARY_COLOR           # Indigo como color principal
+PRIMARY_LIGHT = (130, 134, 251)  # Indigo más claro
+PRIMARY_DARK = (70, 74, 171)     # Indigo más oscuro
 
-SECONDARY = VEGAS_WHITE   # Color secundario
-SECONDARY_LIGHT = (249, 250, 251) # Casi blanco
-SECONDARY_DARK = (209, 213, 219) # Gris un poco más oscuro
+SECONDARY = SECONDARY_COLOR       # Rosa como secundario
+SECONDARY_LIGHT = (244, 114, 182) # Rosa más claro
+SECONDARY_DARK = (190, 24, 93)    # Rosa más oscuro
 
 # Acentos vibrantes para destacar elementos
-ACCENT = VEGAS_GOLD          # Dorado para acentos importantes
-ACCENT_LIGHT = (253, 230, 138) # Dorado más claro
-ACCENT_DARK = (217, 119, 6)   # Dorado más oscuro
+ACCENT = ACCENT_COLOR        # Verde como acento
+ACCENT_LIGHT = (100, 255, 100) # Verde más claro
+ACCENT_DARK = (0, 200, 0)      # Verde más oscuro
 
 # Fondos
-BACKGROUND = WHITE           # Fondo blanco limpio
-BACKGROUND_DARK = (15, 23, 42) # Azul muy oscuro para contraste
+BACKGROUND = BACKGROUND_COLOR    # Fondo azul oscuro
+BACKGROUND_DARK = (10, 10, 15)  # Azul muy oscuro para contraste
 
-# Colores por rangos de números - nueva paleta Vegas
-RANGE_1_30 = PRIMARY_LIGHT     # Rojo para números 1-30
-RANGE_31_60 = VEGAS_GOLD      # Dorado para números 31-60
-RANGE_61_90 = VEGAS_ORANGE    # Naranja para números 61-90
+# Colores por rangos de números - nueva paleta
+RANGE_1_30 = PRIMARY_LIGHT     # Indigo claro para números 1-30
+RANGE_31_60 = HIGHLIGHT_COLOR  # Ámbar para números 31-60
+RANGE_61_90 = SECONDARY_COLOR  # Rosa para números 61-90
 
 # Colores para estados de UI
-DISABLED = VEGAS_SILVER      # Plateado para botones deshabilitados
+DISABLED = (156, 163, 175)   # Gris para botones deshabilitados
 HOVER = (255, 235, 205)      # Tono claro anaranjado para hover
-SELECTED = VEGAS_GOLD         # Dorado para selecciones
+SELECTED = HIGHLIGHT_COLOR   # Ámbar para selecciones
 
 # Colores tradicionales (mantener compatibilidad)
 RED = (239, 68, 68)

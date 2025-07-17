@@ -13,6 +13,9 @@ import threading
 # Importar configuración
 import config as cfg
 
+# Importar pantalla de título
+from title_screen import TitleScreen
+
 # Variables para manejo de escala y responsividad
 global SCALE_X, SCALE_Y
 SCALE_X = 1.0  # Factor de escala horizontal
@@ -25,7 +28,10 @@ pygame.init()
 pygame.mixer.init()
 
 # Configuración de la pantalla
-screen = pygame.display.set_mode((cfg.WIDTH, cfg.HEIGHT))
+if hasattr(cfg, 'FULLSCREEN') and cfg.FULLSCREEN:
+    screen = pygame.display.set_mode((cfg.WIDTH, cfg.HEIGHT), pygame.FULLSCREEN)
+else:
+    screen = pygame.display.set_mode((cfg.WIDTH, cfg.HEIGHT))
 pygame.display.set_caption(cfg.TITLE)
 
 # Cargar imágenes de fondo
@@ -120,6 +126,7 @@ load_responsive_fonts()
 class GameState:
     def __init__(self):
         self.running = True
+        self.show_title_screen = True
         self.game_started = False
         self.game_over = False
         self.board = [[None for _ in range(cfg.BOARD_COLS)] for _ in range(cfg.BOARD_ROWS)]
@@ -130,14 +137,14 @@ class GameState:
         
         # Variables para animaciones y efectos visuales
         self.bingo_animation_start = 0
-        self.bingo_animation_duration = 5000  # 5 segundos
+        self.bingo_animation_duration = 2500  # 2.5 segundos (velocidad x2)
         self.bingo_animation_scale = 1.0
         self.bingo_animation_rotation = 0
         self.bingo_animation_active = False
         
         # Variables para nuevas animaciones
         self.number_animation_start = 0
-        self.number_animation_duration = 1000  # 1 segundo
+        self.number_animation_duration = 500  # 0.5 segundos (velocidad x2)
         self.number_animation_active = False
         self.number_scale = 1.0
         self.button_hover = None  # Para efecto hover en botones
@@ -158,6 +165,10 @@ class GameState:
                     num += 1
 
 game_state = GameState()
+
+# Crear instancia de la pantalla de título
+title_screen = TitleScreen(screen)
+title_screen.start_animation()
 
 # Clase para las pelotas
 class Ball:
@@ -271,90 +282,96 @@ class Ball:
             print(f"Error reproduciendo audio para el número {self.number}: {e}")
 
 def draw_board():
-    # Dibujar tablero de bingo 9x10 con estilo retro Las Vegas
+    # Dibujar tablero de bingo 9x10 con flipcards que se revelan progresivamente
     cell_size = scale_value(48)  # Tamaño de celda escalado
     board_width = cfg.BOARD_COLS * cell_size
     board_height = cfg.BOARD_ROWS * cell_size
     board_x = (cfg.WIDTH - board_width) // 2
-    board_y = scale_value(110, False)  # Alineado a la misma altura que los demás elementos, escalado verticalmente
+    board_y = scale_value(110, False)  # Alineado a la misma altura que los demás elementos
     
-    # Fondo del tablero con borde neón brillante estilo Vegas
-    # Primero dibujar un efecto de resplandor para el tablero con la nueva paleta
+    # Fondo del tablero con borde neón brillante
     for i in range(5, 0, -1):
         glow_rect = pygame.Rect(board_x-i-2, board_y-i-2, board_width+i*2+4, board_height+i*2+4)
-        alpha = int(50 - i * 8)  # Disminuir alpha gradualmente
+        alpha = int(50 - i * 8)
         s = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-        s.fill((180, 0, 0, alpha))  # Rojo con transparencia (nueva paleta)
+        s.fill((*cfg.PRIMARY_COLOR, alpha))
         screen.blit(s, (glow_rect.x, glow_rect.y))
     
-    # Borde con estilo retro Vegas usando la nueva paleta
-    pygame.draw.rect(screen, cfg.BUTTON_COLOR, (board_x-4, board_y-4, board_width+8, board_height+8), 2)  # Rojo
+    # Borde del tablero
+    pygame.draw.rect(screen, cfg.HIGHLIGHT_COLOR, (board_x-4, board_y-4, board_width+8, board_height+8), 2)
     
-    # Título del tablero con estilo Vegas
-    # Texto con sombra para efecto retro
+    # Título del tablero con mejor espaciado
     shadow_offset = 2
     board_title_shadow = font_medium.render("TABLERO", True, cfg.BLACK)
-    title_shadow_rect = board_title_shadow.get_rect(midtop=(board_x + board_width // 2 + shadow_offset, board_y - 45 + shadow_offset))
+    title_shadow_rect = board_title_shadow.get_rect(midtop=(board_x + board_width // 2 + shadow_offset, board_y - 60 + shadow_offset))
     screen.blit(board_title_shadow, title_shadow_rect)
     
-    # Texto principal con color dorado de la nueva paleta
-    board_title = font_medium.render("TABLERO", True, cfg.GLOW_COLOR)  # Dorado
-    title_rect = board_title.get_rect(midtop=(board_x + board_width // 2, board_y - 45))
+    board_title = font_medium.render("TABLERO", True, cfg.HIGHLIGHT_COLOR)
+    title_rect = board_title.get_rect(midtop=(board_x + board_width // 2, board_y - 60))
     screen.blit(board_title, title_rect)
     
-    # Dibujar celdas del tablero y números con estilo Vegas
+    # Dibujar celdas del tablero como flipcards
     for row in range(cfg.BOARD_ROWS):
         for col in range(cfg.BOARD_COLS):
-            cell_x = board_x + col * 48
-            cell_y = board_y + row * 48
-            cell_size = 46  # Celdas ligeramente más grandes
+            cell_x = board_x + col * cell_size
+            cell_y = board_y + row * cell_size
+            card_size = cell_size - 2  # Espacio entre cartas
             
-            # Dibujar celda con estilo Vegas - bordes redondeados
             number = row * cfg.BOARD_COLS + col + 1
             if number <= 90:  # Solo hay 90 números en el bingo
-                # Determinar el color basado en el rango del número - nueva paleta Vegas
+                # Determinar el color basado en el rango del número
                 if number <= 30:
-                    range_color = cfg.BUTTON_COLOR  # Rojo
+                    range_color = cfg.RANGE_1_30
                 elif number <= 60:
-                    range_color = cfg.GLOW_COLOR    # Dorado
+                    range_color = cfg.RANGE_31_60
                 else:
-                    range_color = cfg.BORDER_COLOR  # Naranja
+                    range_color = cfg.RANGE_61_90
                 
-                # Estado de la celda basado en si el número ha sido extraído
+                # Crear superficie de la carta
+                card_surface = pygame.Surface((card_size, card_size))
+                
+                # Estado de la carta basado en si el número ha sido extraído
                 if number in game_state.drawn_numbers:
-                    # Número sorteado - estilo destacado con nueva paleta
-                    pygame.draw.rect(screen, cfg.FRAME_COLOR, (cell_x, cell_y, cell_size, cell_size), border_radius=5)  # Plateado
-                    text_color = range_color  # Color según rango (rojo, dorado o naranja)
+                    # Carta revelada - mostrar número
+                    card_surface.fill(range_color)
                     
-                    # Destacar con efecto brillante si es el número actual
+                    # Borde de la carta revelada
+                    pygame.draw.rect(card_surface, cfg.WHITE, (0, 0, card_size, card_size), 2)
+                    
+                    # Efecto especial si es el número actual
                     if number == game_state.current_number:
-                        # Efecto de brillo para el número actual
-                        for i in range(3, 0, -1):
-                            glow_rect = pygame.Rect(cell_x-i, cell_y-i, cell_size+i*2, cell_size+i*2)
-                            alpha = int(70 - i * 20) 
-                            s = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-                            # Color del brillo según el rango del número
-                            if number <= 30:
-                                glow_color = (180, 0, 0, alpha)     # Rojo con transparencia
-                            elif number <= 60:
-                                glow_color = (255, 215, 0, alpha)   # Dorado con transparencia
-                            else:
-                                glow_color = (255, 140, 0, alpha)   # Naranja con transparencia
-                            s.fill(glow_color)
-                            screen.blit(s, (glow_rect.x, glow_rect.y))
-                            
-                        pygame.draw.rect(screen, cfg.ALT_GLOW_COLOR, (cell_x, cell_y, cell_size, cell_size), border_radius=5)  # Amarillo
-                        text_color = cfg.BLACK  # Máximo contraste para el actual
+                        # Efecto de brillo pulsante
+                        pulse_alpha = int(128 + 127 * math.sin(pygame.time.get_ticks() * 0.01))
+                        glow_surface = pygame.Surface((card_size + 6, card_size + 6), pygame.SRCALPHA)
+                        glow_surface.fill((*cfg.HIGHLIGHT_COLOR, pulse_alpha))
+                        screen.blit(glow_surface, (cell_x - 3, cell_y - 3))
+                    
+                    # Número en la carta
+                    text_color = cfg.WHITE
+                    num_text = font_small.render(str(number), True, text_color)
+                    text_rect = num_text.get_rect(center=(card_size // 2, card_size // 2))
+                    card_surface.blit(num_text, text_rect)
+                    
                 else:
-                    # Número no sorteado - estilo más sutil
-                    pygame.draw.rect(screen, cfg.WHITE, (cell_x, cell_y, cell_size, cell_size), border_radius=5)
-                    pygame.draw.rect(screen, cfg.SECONDARY, (cell_x, cell_y, cell_size, cell_size), 1, border_radius=5)  # Plateado
-                    text_color = cfg.SECONDARY  # Plateado para números no sorteados
+                    # Carta no revelada - mostrar dorso
+                    card_surface.fill(cfg.PRIMARY_COLOR)
+                    
+                    # Patrón en el dorso de la carta
+                    pygame.draw.rect(card_surface, cfg.SECONDARY_COLOR, (0, 0, card_size, card_size), 2)
+                    
+                    # Dibujar patrón de diamante en el centro
+                    center_x, center_y = card_size // 2, card_size // 2
+                    diamond_size = card_size // 4
+                    diamond_points = [
+                        (center_x, center_y - diamond_size),
+                        (center_x + diamond_size, center_y),
+                        (center_x, center_y + diamond_size),
+                        (center_x - diamond_size, center_y)
+                    ]
+                    pygame.draw.polygon(card_surface, cfg.HIGHLIGHT_COLOR, diamond_points)
                 
-                # Número con tipografía sans-serif
-                num_text = font_small.render(str(number), True, text_color)
-                text_rect = num_text.get_rect(center=(cell_x + cell_size//2, cell_y + cell_size//2))
-                screen.blit(num_text, text_rect)
+                # Dibujar la carta en la pantalla
+                screen.blit(card_surface, (cell_x, cell_y))
 
 def draw_buttons():
     """Dibuja los botones del juego con estilo Vegas."""
@@ -587,26 +604,30 @@ def draw_current_number():
         screen.blit(shadow_count, shadow_count_rect)
         
         # Contador principal
-        count_text = font_medium.render(f"{len(game_state.drawn_numbers)}/90", True, cfg.VEGAS_GOLD)
+        count_text = font_medium.render(f"{len(game_state.drawn_numbers)}/90", True, cfg.GLOW_COLOR)
         count_rect = count_text.get_rect(center=(rect_center[0], rect_center[1] + rect_height // 2 + 30))
         screen.blit(count_text, count_rect)
 
 def select_number():
     """Selecciona un número aleatorio del rango disponible."""
-    available_numbers = [i for i in range(1, cfg.TOTAL_NUMBERS + 1) if i not in game_state.drawn_numbers]
-    if available_numbers:
-        number = random.choice(available_numbers)
-        game_state.current_number = number
-        game_state.drawn_numbers.add(number)
-        game_state.balls.append(Ball(number))
-        
-        # Activar animación para el nuevo número
-        game_state.number_animation_start = pygame.time.get_ticks()
-        game_state.number_animation_active = True
-        
-        return number
-    else:
-        game_state.game_over = True
+    try:
+        available_numbers = [i for i in range(1, cfg.TOTAL_NUMBERS + 1) if i not in game_state.drawn_numbers]
+        if available_numbers:
+            number = random.choice(available_numbers)
+            game_state.current_number = number
+            game_state.drawn_numbers.add(number)
+            game_state.balls.append(Ball(number))
+            
+            # Activar animación para el nuevo número
+            game_state.number_animation_start = pygame.time.get_ticks()
+            game_state.number_animation_active = True
+            
+            return number
+        else:
+            game_state.game_over = True
+            return None
+    except Exception as e:
+        print(f"Error en select_number: {e}")
         return None
 
 def draw_number_history():
@@ -656,10 +677,10 @@ def draw_number_history():
     cell_width = (history_rect.width - 30) // cols  # Más espacio entre columnas
     cell_height = 34  # Celdas más grandes para estilo Vegas
     
-    # Títulos de rango con estilo Vegas - nueva paleta de colores
+    # Títulos de rango con paleta moderna
     range_titles = ["1-30", "31-60", "61-90"]
-    # Nuevos colores para los rangos según la nueva paleta
-    range_colors = [cfg.BUTTON_COLOR, cfg.GLOW_COLOR, cfg.BORDER_COLOR]  # Rojo, Dorado, Naranja
+    # Colores para los rangos según la paleta moderna definida
+    range_colors = [cfg.RANGE_1_30, cfg.RANGE_31_60, cfg.RANGE_61_90]  # Índigo claro, Ámbar, Rosa
     
     # Barra de títulos con rangos - más espaciada
     range_bar_y = history_rect.top + scale_value(50)
@@ -708,16 +729,16 @@ def draw_number_history():
         x = history_rect.left + 15 + col * cell_width
         y = history_rect.top + 85 + row * cell_height
         
-        # Determinar color basado en el rango del número - nueva paleta Vegas
+        # Determinar color basado en el rango del número - paleta moderna
         if num <= 30:
-            number_color = cfg.RANGE_1_30     # Rojo para números 1-30
-            glow_color = (180, 0, 0)         # Rojo brillante para neón
+            number_color = cfg.RANGE_1_30     # Índigo claro para números 1-30
+            glow_color = (130, 134, 251)     # Índigo brillante para neón
         elif num <= 60:
-            number_color = cfg.RANGE_31_60    # Dorado para números 31-60
-            glow_color = (255, 215, 0)       # Dorado brillante para neón
+            number_color = cfg.RANGE_31_60    # Ámbar para números 31-60
+            glow_color = (253, 253, 150)     # Ámbar brillante para neón
         else:
-            number_color = cfg.RANGE_61_90    # Naranja para números 61-90
-            glow_color = (255, 165, 0)       # Naranja brillante para neón
+            number_color = cfg.RANGE_61_90    # Rosa para números 61-90
+            glow_color = (255, 0, 110)       # Rosa brillante para neón
         
         # Dibujar celda con estilo Vegas
         cell_rect = pygame.Rect(x, y, cell_width - 10, cell_height - 6)
@@ -874,7 +895,7 @@ def draw_timer():
             screen.blit(s, (glow_rect.x, glow_rect.y))
             
         pygame.draw.rect(screen, cfg.BACKGROUND_DARK, timer_rect)
-        pygame.draw.rect(screen, cfg.VEGAS_BLUE, timer_rect, 2, border_radius=5)
+        pygame.draw.rect(screen, cfg.PRIMARY_COLOR, timer_rect, 2, border_radius=5)
         
         # Texto del temporizador con sombra para estilo neón
         time_text = font_small.render(f"TIEMPO: {minutes:02d}:{seconds:02d}", True, cfg.WHITE)
@@ -893,7 +914,7 @@ def draw_timer():
         
         # Borde interno más claro
         inner_rect = bingo_button_rect.inflate(-10, -10)
-        pygame.draw.rect(screen, cfg.VEGAS_MEDIUM_GRAY, inner_rect, border_radius=6)
+        pygame.draw.rect(screen, cfg.FRAME_COLOR, inner_rect, border_radius=6)
         
         # Texto del botón deshabilitado
         bingo_text = font_medium.render("BINGO", True, (180, 180, 180))
@@ -983,8 +1004,11 @@ def check_button_click(pos):
             game_state.start_time = pygame.time.get_ticks()
         else:
             # Siguiente número
-            select_number()
-            game_state.number_animation_start = pygame.time.get_ticks()
+            try:
+                select_number()
+                game_state.number_animation_start = pygame.time.get_ticks()
+            except Exception as e:
+                print(f"Error al seleccionar siguiente número: {e}")
     
     # Comprobar si se hizo clic en el botón BINGO
     elif bingo_button_rect.collidepoint(pos):
@@ -1010,114 +1034,136 @@ while game_state.running:
     for event in pygame.event.get():
         if event.type == QUIT:
             game_state.running = False
-        elif event.type == MOUSEMOTION:
-            # Comprobar efectos hover en botones
-            mouse_pos = pygame.mouse.get_pos()
-            
-            # Dimensiones de los botones - IDÉNTICAS a las de draw_buttons
-            start_button_rect = pygame.Rect(cfg.WIDTH // 2 - 150, cfg.HEIGHT - 100, 300, 50)
-            bingo_button_rect = pygame.Rect(cfg.WIDTH - 150, cfg.HEIGHT - 100, 120, 50)
-            reset_button_rect = pygame.Rect(30, cfg.HEIGHT - 100, 120, 50)  # Nuevo botón REINICIAR
-            
-            if start_button_rect.collidepoint(mouse_pos):
-                game_state.button_hover = "start"
-            elif bingo_button_rect.collidepoint(mouse_pos):
-                game_state.button_hover = "bingo"
-            elif reset_button_rect.collidepoint(mouse_pos):
-                game_state.button_hover = "reset"
-            else:
-                game_state.button_hover = None
-        elif event.type == MOUSEBUTTONDOWN:
-            check_button_click(event.pos)
+        elif event.type == KEYDOWN:
+            if event.key == K_ESCAPE:
+                game_state.running = False
+        elif game_state.show_title_screen:
+            # Manejar eventos de la pantalla de título
+            result = title_screen.handle_event(event)
+            if result == "start_game":
+                game_state.show_title_screen = False
+                game_state.game_started = True
+            elif result == "exit_game":
+                pygame.quit()
+                sys.exit()
+        else:
+            # Manejar eventos del juego principal
+            if event.type == MOUSEMOTION:
+                # Comprobar efectos hover en botones
+                mouse_pos = pygame.mouse.get_pos()
+                
+                # Dimensiones de los botones - IDÉNTICAS a las de draw_buttons
+                start_button_rect = pygame.Rect(cfg.WIDTH // 2 - 150, cfg.HEIGHT - 100, 300, 50)
+                bingo_button_rect = pygame.Rect(cfg.WIDTH - 150, cfg.HEIGHT - 100, 120, 50)
+                reset_button_rect = pygame.Rect(30, cfg.HEIGHT - 100, 120, 50)  # Nuevo botón REINICIAR
+                
+                if start_button_rect.collidepoint(mouse_pos):
+                    game_state.button_hover = "start"
+                elif bingo_button_rect.collidepoint(mouse_pos):
+                    game_state.button_hover = "bingo"
+                elif reset_button_rect.collidepoint(mouse_pos):
+                    game_state.button_hover = "reset"
+                else:
+                    game_state.button_hover = None
+            elif event.type == MOUSEBUTTONDOWN:
+                check_button_click(event.pos)
     
     # Actualizar animaciones
     current_time = pygame.time.get_ticks()
     
-    # Actualizar animación de BINGO
-    if game_state.bingo_animation_active:
-        if current_time - game_state.bingo_animation_start > game_state.bingo_animation_duration:
-            game_state.bingo_animation_active = False
-            # Activar efecto de confeti al terminar la animación de bingo
-            if not game_state.show_confetti:
-                game_state.show_confetti = True
-                # Crear partículas de confeti
-                for _ in range(100):
-                    particle = {
-                        'x': random.randint(0, cfg.WIDTH),
-                        'y': random.randint(-100, -10),
-                        'velocity_y': random.uniform(1, 3),
-                        'velocity_x': random.uniform(-1, 1),
-                        'color': random.choice([cfg.PRIMARY, cfg.SECONDARY, cfg.ACCENT]),
-                        'size': random.randint(5, 15),
-                        'rotation': random.uniform(0, 360)
-                    }
-                    game_state.confetti_particles.append(particle)
-    
-    # Actualizar confeti
-    if game_state.show_confetti:
-        for particle in game_state.confetti_particles:
-            particle['y'] += particle['velocity_y']
-            particle['x'] += particle['velocity_x']
-            particle['rotation'] += 2
-            
-            # Eliminar partículas fuera de la pantalla
-            if particle['y'] > cfg.HEIGHT:
-                game_state.confetti_particles.remove(particle)
+    if game_state.show_title_screen:
+        # Actualizar la pantalla de título
+        title_screen.update()
+    else:
+        # Actualizar animación de BINGO
+        if game_state.bingo_animation_active:
+            if current_time - game_state.bingo_animation_start > game_state.bingo_animation_duration:
+                game_state.bingo_animation_active = False
+                # Activar efecto de confeti al terminar la animación de bingo
+                if not game_state.show_confetti:
+                    game_state.show_confetti = True
+                    # Crear partículas de confeti
+                    for _ in range(100):
+                        particle = {
+                            'x': random.randint(0, cfg.WIDTH),
+                            'y': random.randint(-100, -10),
+                            'velocity_y': random.uniform(1, 3),
+                            'velocity_x': random.uniform(-1, 1),
+                            'color': random.choice([cfg.PRIMARY, cfg.SECONDARY, cfg.ACCENT]),
+                            'size': random.randint(5, 15),
+                            'rotation': random.uniform(0, 360)
+                        }
+                        game_state.confetti_particles.append(particle)
+        
+        # Actualizar confeti
+        if game_state.show_confetti:
+            for particle in game_state.confetti_particles:
+                particle['y'] += particle['velocity_y']
+                particle['x'] += particle['velocity_x']
+                particle['rotation'] += 2
                 
-        # Desactivar confeti cuando ya no hay partículas
-        if len(game_state.confetti_particles) == 0:
-            game_state.show_confetti = False
-    
-    # Actualizar todas las pelotas
-    for ball in game_state.balls:
-        ball.update()
+                # Eliminar partículas fuera de la pantalla
+                if particle['y'] > cfg.HEIGHT:
+                    game_state.confetti_particles.remove(particle)
+                    
+            # Desactivar confeti cuando ya no hay partículas
+            if len(game_state.confetti_particles) == 0:
+                game_state.show_confetti = False
+        
+        # Actualizar todas las pelotas
+        for ball in game_state.balls:
+            ball.update()
     
     # --------- RENDERIZADO ----------
-    # Limpiar la pantalla con el fondo adecuado
-    if background_images:  # Verificar que tengamos al menos una imagen
-        # Usar la imagen de fondo actual
-        screen.blit(background_images[current_background_index], (0, 0))
+    if game_state.show_title_screen:
+        # Mostrar la pantalla de título
+        title_screen.draw()
     else:
-        # Si no se pudo cargar ninguna imagen, usar el color de fondo como respaldo
-        screen.fill(cfg.BACKGROUND)
-    
-    # Dibujar el número actual grande (ahora en la parte superior)
-    draw_current_number()
-    
-    # Dibujar el historial de números sorteados
-    draw_number_history()
-    
-    # Dibujar el tablero (ahora más pequeño y posicionado mejor)
-    draw_board()
-    
-    # Dibujar las pelotas
-    for ball in game_state.balls:
-        ball.draw()
-    
-    # Dibujar los botones con efectos de hover
-    draw_buttons()
-    
-    # Dibujar la animación de bingo si corresponde
-    if game_state.bingo_called:
-        draw_bingo_animation()
-    
-    # Dibujar confeti si está activo
-    if game_state.show_confetti:
-        for particle in game_state.confetti_particles:
-            # Dibujar rectángulos rotados como confeti
-            surface = pygame.Surface((particle['size'], particle['size']), pygame.SRCALPHA)
-            pygame.draw.rect(surface, particle['color'], (0, 0, particle['size'], particle['size']))
-            rotated = pygame.transform.rotate(surface, particle['rotation'])
-            rect = rotated.get_rect(center=(particle['x'], particle['y']))
-            screen.blit(rotated, rect)
-    
-    # Mostrar tiempo transcurrido si el juego está activo
-    if game_state.game_started and not game_state.game_over:
-        elapsed = (current_time - game_state.start_time) // 1000  # En segundos
-        minutes = elapsed // 60
-        seconds = elapsed % 60
-        time_text = font_small.render(f"Tiempo: {minutes:02d}:{seconds:02d}", True, cfg.BLACK)
-        screen.blit(time_text, (10, 10))
+        # Limpiar la pantalla con el fondo adecuado
+        if background_images:  # Verificar que tengamos al menos una imagen
+            # Usar la imagen de fondo actual
+            screen.blit(background_images[current_background_index], (0, 0))
+        else:
+            # Si no se pudo cargar ninguna imagen, usar el color de fondo como respaldo
+            screen.fill(cfg.BACKGROUND)
+        
+        # Dibujar el número actual grande (ahora en la parte superior)
+        draw_current_number()
+        
+        # Dibujar el historial de números sorteados
+        draw_number_history()
+        
+        # Dibujar el tablero (ahora más pequeño y posicionado mejor)
+        draw_board()
+        
+        # Dibujar las pelotas
+        for ball in game_state.balls:
+            ball.draw()
+        
+        # Dibujar los botones con efectos de hover
+        draw_buttons()
+        
+        # Dibujar la animación de bingo si corresponde
+        if game_state.bingo_called:
+            draw_bingo_animation()
+        
+        # Dibujar confeti si está activo
+        if game_state.show_confetti:
+            for particle in game_state.confetti_particles:
+                # Dibujar rectángulos rotados como confeti
+                surface = pygame.Surface((particle['size'], particle['size']), pygame.SRCALPHA)
+                pygame.draw.rect(surface, particle['color'], (0, 0, particle['size'], particle['size']))
+                rotated = pygame.transform.rotate(surface, particle['rotation'])
+                rect = rotated.get_rect(center=(particle['x'], particle['y']))
+                screen.blit(rotated, rect)
+        
+        # Mostrar tiempo transcurrido si el juego está activo
+        if game_state.game_started and not game_state.game_over:
+            elapsed = (current_time - game_state.start_time) // 1000  # En segundos
+            minutes = elapsed // 60
+            seconds = elapsed % 60
+            time_text = font_small.render(f"Tiempo: {minutes:02d}:{seconds:02d}", True, cfg.BLACK)
+            screen.blit(time_text, (10, 10))
     
     # Recargar fuentes si la resolución cambió (solo durante pruebas)
     if cfg.WIDTH != int(BASE_WIDTH * SCALE_X) or cfg.HEIGHT != int(BASE_HEIGHT * SCALE_Y):
@@ -1129,7 +1175,7 @@ while game_state.running:
     
     # Actualizar la pantalla y controlar FPS
     pygame.display.flip()
-    clock.tick(60)
+    clock.tick(120)  # FPS aumentados para mayor fluidez
 
 
 
