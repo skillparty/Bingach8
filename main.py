@@ -282,12 +282,30 @@ class Ball:
             print(f"Error reproduciendo audio para el número {self.number}: {e}")
 
 def draw_board():
-    # Dibujar tablero de bingo 9x10 con flipcards que se revelan progresivamente
-    cell_size = scale_value(48)  # Tamaño de celda escalado
+    """Dibuja el tablero principal del bingo con estilo Vegas."""
+    # POSICIÓN COORDINADA: Centro de la pantalla, posición optimizada
+    cell_size = scale_value(45)  # Tamaño óptimo para visibilidad
     board_width = cfg.BOARD_COLS * cell_size
     board_height = cfg.BOARD_ROWS * cell_size
+    
+    # Centrar horizontalmente, posicionar mucho más arriba para alinearse con el historial
     board_x = (cfg.WIDTH - board_width) // 2
-    board_y = scale_value(110, False)  # Alineado a la misma altura que los demás elementos
+    board_y = scale_value(120, False)  # Posición mucho más alta (260 -> 120) para alinear con historial
+    
+    # TÍTULO DEL TABLERO: Posicionado claramente ARRIBA del tablero
+    # Dibujar el título con mayor separación respecto al tablero
+    title_y = board_y - scale_value(90, False)  # Mayor separación entre título y tablero
+    
+    # Sombra para el título
+    shadow_offset = 3
+    board_title_shadow = font_big.render("TABLERO", True, cfg.BLACK)
+    title_shadow_rect = board_title_shadow.get_rect(midtop=(board_x + board_width // 2 + shadow_offset, title_y + shadow_offset))
+    screen.blit(board_title_shadow, title_shadow_rect)
+    
+    # Título principal
+    board_title = font_big.render("TABLERO", True, cfg.HIGHLIGHT_COLOR)
+    title_rect = board_title.get_rect(midtop=(board_x + board_width // 2, title_y))
+    screen.blit(board_title, title_rect)
     
     # Fondo del tablero con borde neón brillante
     for i in range(5, 0, -1):
@@ -299,16 +317,6 @@ def draw_board():
     
     # Borde del tablero
     pygame.draw.rect(screen, cfg.HIGHLIGHT_COLOR, (board_x-4, board_y-4, board_width+8, board_height+8), 2)
-    
-    # Título del tablero con mejor espaciado
-    shadow_offset = 2
-    board_title_shadow = font_medium.render("TABLERO", True, cfg.BLACK)
-    title_shadow_rect = board_title_shadow.get_rect(midtop=(board_x + board_width // 2 + shadow_offset, board_y - 60 + shadow_offset))
-    screen.blit(board_title_shadow, title_shadow_rect)
-    
-    board_title = font_medium.render("TABLERO", True, cfg.HIGHLIGHT_COLOR)
-    title_rect = board_title.get_rect(midtop=(board_x + board_width // 2, board_y - 60))
-    screen.blit(board_title, title_rect)
     
     # Dibujar celdas del tablero como flipcards
     for row in range(cfg.BOARD_ROWS):
@@ -497,11 +505,11 @@ def draw_buttons():
 
 def draw_current_number():
     if game_state.current_number is not None:
-        # Marco para el número actual con estilo Vegas - posicionado a la izquierda y escalado
-        frame_width = scale_value(220)
-        frame_height = scale_value(240, False)
-        frame_x = scale_value(70)
-        frame_y = scale_value(200, False)
+        # POSICIÓN COORDINADA: Esquina superior izquierda
+        frame_width = scale_value(200)   # Tamaño óptimo
+        frame_height = scale_value(200, False)
+        frame_x = scale_value(40)        # Margen izquierdo generoso
+        frame_y = scale_value(40, False) # Margen superior generoso
         
         # Efecto pulsante para el marco
         current_time = pygame.time.get_ticks()
@@ -534,16 +542,13 @@ def draw_current_number():
             if progress >= 1.0:
                 game_state.number_animation_active = False
         
-        # Posición común para todos los elementos - alineados a la misma altura
-        common_y = 110  # Altura común para todos los elementos principales
+        # Usar las coordenadas definidas al inicio de la función
+        rect_width = frame_width * scale  
+        rect_height = frame_height * scale
         
-        # Dimensiones para el marco estilo Las Vegas
-        rect_width = 200 * scale  
-        rect_height = 200 * scale
-        
-        # Nueva posición: lado izquierdo alineado con el tablero y el historial
-        rect_center = (rect_width // 2 + 20, common_y + rect_height // 2)
-        rect_pos = (rect_center[0] - rect_width // 2, rect_center[1] - rect_height // 2)
+        # Centrar en el área definida
+        rect_center = (frame_x + rect_width // 2, frame_y + rect_height // 2)
+        rect_pos = (frame_x, frame_y)
         
         # Efecto de brillo neón alrededor del número actual
         current_time = pygame.time.get_ticks()
@@ -609,18 +614,40 @@ def draw_current_number():
         screen.blit(count_text, count_rect)
 
 def select_number():
-    """Selecciona un número aleatorio del rango disponible."""
+    """Selecciona un número aleatorio que no haya salido previamente.
+    Actualiza el número actual y reproduce el audio inmediatamente."""
     try:
+        # Obtener números disponibles (que no hayan salido)
         available_numbers = [i for i in range(1, cfg.TOTAL_NUMBERS + 1) if i not in game_state.drawn_numbers]
         if available_numbers:
             number = random.choice(available_numbers)
             game_state.current_number = number
             game_state.drawn_numbers.add(number)
-            game_state.balls.append(Ball(number))
             
             # Activar animación para el nuevo número
             game_state.number_animation_start = pygame.time.get_ticks()
             game_state.number_animation_active = True
+            
+            # Reproducir audio inmediatamente
+            try:
+                audio_path = f"audios_wav/numero_{number}.wav"
+                if os.path.exists(audio_path):
+                    number_sound = pygame.mixer.Sound(audio_path)
+                    number_sound.play()
+                    print(f"Reproduciendo audio: {audio_path}")
+                else:
+                    print(f"Archivo de audio no encontrado: {audio_path}")
+            except Exception as audio_error:
+                print(f"Error reproduciendo sonido del número {number}: {audio_error}")
+                # Intentar con formato alternativo
+                try:
+                    alt_audio_path = f"audios/{number}.wav"
+                    if os.path.exists(alt_audio_path):
+                        number_sound = pygame.mixer.Sound(alt_audio_path)
+                        number_sound.play()
+                        print(f"Reproduciendo audio alternativo: {alt_audio_path}")
+                except Exception as alt_error:
+                    print(f"Error con audio alternativo: {alt_error}")
             
             return number
         else:
@@ -632,8 +659,15 @@ def select_number():
 
 def draw_number_history():
     """Dibuja el historial de números sorteados con estilo retro Las Vegas."""
-    # Definir área para el historial con más espacio y diseño Vegas
-    history_rect = pygame.Rect(cfg.WIDTH - scale_value(200), scale_value(110), scale_value(180), scale_value(400))
+    # POSICIÓN COORDINADA: Lado derecho perfectamente alineado
+    history_width = int(cfg.WIDTH * 0.22)   # 22% del ancho para mejor visibilidad
+    history_height = int(cfg.HEIGHT * 0.65) # 65% de la altura
+    history_rect = pygame.Rect(
+        cfg.WIDTH - history_width - scale_value(30),  # Margen derecho
+        scale_value(40, False),                      # Alineado con número actual
+        history_width,
+        history_height
+    )
     
     # Efecto de brillo neón alrededor del historial
     for i in range(5, 0, -1):
@@ -647,15 +681,15 @@ def draw_number_history():
     pygame.draw.rect(screen, cfg.WHITE, history_rect, border_radius=10)
     pygame.draw.rect(screen, cfg.BORDER_COLOR, history_rect, 2, border_radius=10)
     
-    # Título del historial con estilo Vegas
-    # Sombra para el título - usando fuente pequeña para que quepa en el marco
-    shadow_title = font_small.render("HISTORIAL", True, cfg.BLACK)
-    shadow_title_rect = shadow_title.get_rect(midtop=(history_rect.centerx+2, history_rect.top + scale_value(15)+2))
+    # TÍTULO DEL HISTORIAL: Prominente y bien posicionado
+    shadow_offset = 3
+    shadow_title = font_medium.render("HISTORIAL", True, cfg.BLACK)
+    shadow_title_rect = shadow_title.get_rect(midtop=(history_rect.centerx + shadow_offset, history_rect.top + 20 + shadow_offset))
     screen.blit(shadow_title, shadow_title_rect)
     
     # Título principal con color dorado Vegas
-    title_text = font_small.render("HISTORIAL", True, cfg.GLOW_COLOR)
-    title_rect = title_text.get_rect(midtop=(history_rect.centerx, history_rect.top + scale_value(15)))
+    title_text = font_medium.render("HISTORIAL", True, cfg.GLOW_COLOR)
+    title_rect = title_text.get_rect(midtop=(history_rect.centerx, history_rect.top + 20))
     screen.blit(title_text, title_rect)
     
     if not game_state.drawn_numbers:
@@ -674,29 +708,29 @@ def draw_number_history():
     cols = 3
     rows = (len(sorted_numbers) + cols - 1) // cols
     
-    cell_width = (history_rect.width - 30) // cols  # Más espacio entre columnas
-    cell_height = 34  # Celdas más grandes para estilo Vegas
-    
     # Títulos de rango con paleta moderna
     range_titles = ["1-30", "31-60", "61-90"]
     # Colores para los rangos según la paleta moderna definida
     range_colors = [cfg.RANGE_1_30, cfg.RANGE_31_60, cfg.RANGE_61_90]  # Índigo claro, Ámbar, Rosa
     
-    # Barra de títulos con rangos - más espaciada
-    range_bar_y = history_rect.top + scale_value(50)
-    range_bar_height = scale_value(30)
-    range_bar = pygame.Rect(history_rect.left + scale_value(10), range_bar_y, history_rect.width - scale_value(20), range_bar_height)
+    # Barra de títulos con rangos - adaptada al nuevo tamaño
+    range_bar_y = history_rect.top + scale_value(60)  # Más espacio para el título
+    range_bar_height = scale_value(25)
+    range_bar = pygame.Rect(history_rect.left + 10, range_bar_y, history_rect.width - 20, range_bar_height)
     pygame.draw.rect(screen, cfg.FRAME_COLOR, range_bar, border_radius=5)  # Usando plateado
     
-    # Etiquetas individuales para evitar superposición
+    # Ajustar espacio para distribuir uniformemente las 3 etiquetas
+    label_width = scale_value(40)
+    spacing = (history_rect.width - (label_width * 3)) / 4
+    
     for i in range(3):
-        # Calcular posición para cada rango - distribuidos horizontalmente con más espacio
-        label_width = scale_value(45)  # Ancho reducido para las etiquetas
-        x_pos = history_rect.left + scale_value(15) + i * (label_width + scale_value(10))
+        # Distribución uniforme de las etiquetas
+        x_pos = history_rect.left + spacing + i * (label_width + spacing)
         
-        # Mini rectángulo para cada etiqueta
+        # Mini rectángulo para cada etiqueta con buen contraste
         label_rect = pygame.Rect(x_pos, range_bar_y, label_width, range_bar_height)
-        pygame.draw.rect(screen, cfg.BLACK, label_rect, 1, border_radius=3)
+        pygame.draw.rect(screen, cfg.BACKGROUND_COLOR, label_rect, 0, border_radius=5)
+        pygame.draw.rect(screen, range_colors[i], label_rect, 2, border_radius=5)
         
         # Texto con sombra - fuente más pequeña para que quepa
         shadow_text = font_smallest.render(range_titles[i], True, cfg.BLACK)
@@ -713,21 +747,37 @@ def draw_number_history():
         col = i % cols
         row = i // cols
         
+        # DIMENSIONES OPTIMIZADAS: Celdas más pequeñas para evitar solapamiento
+        cell_width = (history_rect.width - scale_value(40)) // cols
+        cell_height = scale_value(40)  # Altura fija para todas las celdas
+        
         # Si hay demasiados números, dejar de dibujar para evitar salirse del área
-        if row >= 9:  # Aumentamos a 9 filas (27 números) visibles con el nuevo diseño
+        max_visible_rows = 8  # Limitamos a 8 filas (24 números) para mejor espaciado
+        if row >= max_visible_rows:
             # Indicador con estilo Vegas de que hay más números
-            more_shadow = font_small.render(f"+ {len(sorted_numbers) - 27} más", True, cfg.BLACK)
+            more_shadow = font_small.render(f"+ {len(sorted_numbers) - (max_visible_rows * cols)} más", True, cfg.BLACK)
             more_shadow_rect = more_shadow.get_rect(center=(history_rect.centerx+1, history_rect.bottom - 25+1))
             screen.blit(more_shadow, more_shadow_rect)
             
-            more_text = font_small.render(f"+ {len(sorted_numbers) - 27} más", True, cfg.GLOW_COLOR)  # Dorado
+            more_text = font_small.render(f"+ {len(sorted_numbers) - (max_visible_rows * cols)} más", True, cfg.GLOW_COLOR)  # Dorado
             more_rect = more_text.get_rect(center=(history_rect.centerx, history_rect.bottom - 25))
             screen.blit(more_text, more_rect)
             break
         
-        # Posición de la celda
-        x = history_rect.left + 15 + col * cell_width
-        y = history_rect.top + 85 + row * cell_height
+        # POSICIÓN OPTIMIZADA: Mejor espaciado y distribución
+        spacing_x = scale_value(8)  # Espaciado horizontal consistente
+        spacing_y = scale_value(8)  # Espaciado vertical consistente
+        
+        # Inicio de la cuadrícula después de la barra de rangos con margen fijo
+        grid_start_y = range_bar_y + range_bar_height + scale_value(20)
+        
+        # Calcular posición centrada para la cuadrícula
+        total_grid_width = (cell_width * cols) + (spacing_x * (cols - 1))
+        grid_start_x = history_rect.left + (history_rect.width - total_grid_width) // 2
+        
+        # Calcular posición X e Y para cada celda
+        x = grid_start_x + col * (cell_width + spacing_x)
+        y = grid_start_y + row * (cell_height + spacing_y)
         
         # Determinar color basado en el rango del número - paleta moderna
         if num <= 30:
@@ -740,8 +790,8 @@ def draw_number_history():
             number_color = cfg.RANGE_61_90    # Rosa para números 61-90
             glow_color = (255, 0, 110)       # Rosa brillante para neón
         
-        # Dibujar celda con estilo Vegas
-        cell_rect = pygame.Rect(x, y, cell_width - 10, cell_height - 6)
+        # Dibujar celda con dimensiones precisas
+        cell_rect = pygame.Rect(x, y, cell_width, cell_height)
         
         # Destacar el número actual con efecto neón usando la nueva paleta
         if num == game_state.current_number:
@@ -754,15 +804,17 @@ def draw_number_history():
                 screen.blit(s, (glow_rect.x, glow_rect.y))
                 
             # Número actual con fondo según su rango
-            pygame.draw.rect(screen, number_color, cell_rect, border_radius=5)
+            pygame.draw.rect(screen, number_color, cell_rect, border_radius=8)
             # Usar color de texto con buen contraste
             text_color = cfg.BLACK if num > 30 and num <= 60 else cfg.TEXT_COLOR  # Negro para dorado, blanco para rojo/naranja
-            num_text = font_small.render(str(num), True, text_color)
+            # Tamaño de fuente adaptado al tamaño de la celda
+            num_text = font_small.render(str(num), True, text_color)  
         else:
             # Números normales con borde de color según rango
-            pygame.draw.rect(screen, cfg.WHITE, cell_rect, border_radius=5)
-            pygame.draw.rect(screen, number_color, cell_rect, 1, border_radius=5)
-            num_text = font_small.render(str(num), True, number_color)
+            pygame.draw.rect(screen, cfg.WHITE, cell_rect, border_radius=8)
+            pygame.draw.rect(screen, number_color, cell_rect, 2, border_radius=8)  # Borde más grueso
+            # Tamaño de fuente adaptado al tamaño de la celda
+            num_text = font_small.render(str(num), True, number_color)  
         
         # Número con tipografía sans-serif
         num_rect = num_text.get_rect(center=cell_rect.center)
@@ -948,8 +1000,8 @@ def reset_game():
     # Reiniciar tiempo
     game_state.start_time = pygame.time.get_ticks()
     
-    # Reiniciar posiciones de pelotas
-    Ball.reset_positions()
+    # Ya no usamos pelotas, así que no necesitamos reiniciar sus posiciones
+    # Ball.reset_positions()  # Comentado porque ya no se usa
     
     # Reinicializar el tablero
     game_state.initialize_board()
@@ -1110,9 +1162,8 @@ while game_state.running:
             if len(game_state.confetti_particles) == 0:
                 game_state.show_confetti = False
         
-        # Actualizar todas las pelotas
-        for ball in game_state.balls:
-            ball.update()
+        # Las pelotas han sido eliminadas - no es necesario actualizarlas
+        pass
     
     # --------- RENDERIZADO ----------
     if game_state.show_title_screen:
@@ -1136,9 +1187,7 @@ while game_state.running:
         # Dibujar el tablero (ahora más pequeño y posicionado mejor)
         draw_board()
         
-        # Dibujar las pelotas
-        for ball in game_state.balls:
-            ball.draw()
+        # Ya no se dibujan pelotas - fueron eliminadas
         
         # Dibujar los botones con efectos de hover
         draw_buttons()

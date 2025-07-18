@@ -66,10 +66,11 @@ ACCENT_DARK = (0, 200, 0)      # Verde más oscuro
 BACKGROUND = BACKGROUND_COLOR    # Fondo azul oscuro
 BACKGROUND_DARK = (10, 10, 15)  # Azul muy oscuro para contraste
 
-# Colores por rangos de números - nueva paleta
-RANGE_1_30 = PRIMARY_LIGHT     # Indigo claro para números 1-30
-RANGE_31_60 = HIGHLIGHT_COLOR  # Ámbar para números 31-60
-RANGE_61_90 = SECONDARY_COLOR  # Rosa para números 61-90
+# Colores para los rangos del tablero y el historial
+PRIMARY_LIGHT = (130, 134, 251)  # Definición explícita del color Indigo claro
+RANGE_1_30 = PRIMARY_LIGHT        # Indigo claro para números 1-30
+RANGE_31_60 = HIGHLIGHT_COLOR    # Ámbar para números 31-60
+RANGE_61_90 = SECONDARY_COLOR    # Rosa para números 61-90
 
 # Colores para estados de UI
 DISABLED = (156, 163, 175)   # Gris para botones deshabilitados
@@ -93,9 +94,9 @@ AUDIO_FILE_FORMAT = "wav"    # Formato de los archivos de audio
 # Configuración de las pelotas
 BALL_RADIUS = 40
 MAX_BOUNCES = 3
-BOUNCE_DAMPING = 0.6
-GRAVITY = 0.2
-INITIAL_VELOCITY = 2
+BOUNCE_DAMPING = 0.75      # Aumentado de 0.6 a 0.75 para rebotes más rápidos
+GRAVITY = 1.0             # Aumentado significativamente para caída mucho más rápida
+INITIAL_VELOCITY = 8.0    # Aumentado significativamente para velocidad inicial mucho mayor
 
 # Configuración del tablero
 BOARD_ROWS = 9
