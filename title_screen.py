@@ -1,6 +1,6 @@
 """
-Pantalla de título para el juego Bingacho
-Incluye flipcards con unos y ceros formando "Bing8" y efecto de ola estilo Hokusai
+Pantalla de título moderna para el juego Bingacho
+Diseño elegante con animaciones fluidas y efectos visuales modernos
 """
 
 import pygame
@@ -9,587 +9,626 @@ import random
 import time
 from pygame.locals import *
 import config as cfg
+from dataclasses import dataclass
 
-class GlitchCard:
-    def __init__(self, x, y, size, value, target_value, delay=0):
+@dataclass
+class BinaryBackgroundConfig:
+    """Configuración para el fondo binario animado"""
+    density: float = 0.7
+    animation_speed: float = 1.0
+    base_opacity: float = 0.3
+    text_opacity: float = 0.5
+    transition_duration: float = 1.25
+    color_scheme: tuple = (100, 150, 200)
+
+@dataclass
+class BinaryChar:
+    """Estructura de datos para un carácter binario"""
+    value: int
+    target_value: int
+    transition_time: float
+    opacity: float
+    is_text: bool
+    text_char: str
+
+class BinaryBackground:
+    """Fondo binario animado inspirado en VS Code"""
+    
+    def __init__(self, width, height, config=None):
+        self.width = width
+        self.height = height
+        self.config = config or BinaryBackgroundConfig()
+        
+        # Configuración de fuente más grande
+        self.char_size = 18  # Aumentado de 13 a 18
+        self.line_height = 22  # Aumentado proporcionalmente
+        self.font = pygame.font.Font(None, self.char_size)
+        
+        # Calcular dimensiones de la grilla
+        self.cols = int(width // self.char_size)
+        self.rows = int(height // self.line_height)
+        
+        # Inicializar componentes
+        self.grid = self._generate_initial_grid()
+        self.text_positions = self._calculate_text_positions()
+        self.animation_time = 0
+        
+    def _generate_initial_grid(self):
+        """Genera la matriz inicial de caracteres binarios"""
+        grid = []
+        for row in range(self.rows):
+            grid_row = []
+            for col in range(self.cols):
+                value = random.randint(0, 1)
+                target_value = random.randint(0, 1)
+                
+                char = BinaryChar(
+                    value=value,
+                    target_value=target_value,
+                    transition_time=0.0,
+                    opacity=random.uniform(0.1, self.config.base_opacity),
+                    is_text=False,
+                    text_char=""
+                )
+                grid_row.append(char)
+            grid.append(grid_row)
+        return grid
+    
+    def _calculate_text_positions(self):
+        """Calcula posiciones para el texto 'Bingacho_joseAlejandro'"""
+        text = "Bingacho_joseAlejandro"
+        positions = []
+        
+        for i in range(3):
+            attempts = 0
+            while attempts < 10:
+                row = random.randint(0, self.rows - 1)
+                col = random.randint(0, max(0, self.cols - len(text)))
+                
+                center_row = self.rows // 2
+                center_col = self.cols // 2
+                
+                if (abs(row - center_row) > 5 or abs(col - center_col) > 15):
+                    positions.append({
+                        'row': row,
+                        'col': col,
+                        'text': text,
+                        'fade_state': random.uniform(0, 1),
+                        'visible': True
+                    })
+                    break
+                attempts += 1
+        
+        return positions
+    
+    def update(self, delta_time):
+        """Actualiza la animación del fondo binario"""
+        self.animation_time += delta_time
+        
+        for row in range(self.rows):
+            for col in range(self.cols):
+                char = self.grid[row][col]
+                
+                char.transition_time += delta_time * self.config.animation_speed
+                
+                if char.transition_time >= self.config.transition_duration:
+                    char.value = char.target_value
+                    char.target_value = random.randint(0, 1)
+                    char.transition_time = 0.0
+                
+                base_opacity = self.config.base_opacity
+                opacity_variation = 0.1 * math.sin(self.animation_time * 2 + row * 0.1 + col * 0.1)
+                char.opacity = max(0.05, base_opacity + opacity_variation)
+        
+        for text_pos in self.text_positions:
+            text_pos['fade_state'] += delta_time * 0.5
+            if text_pos['fade_state'] > 2.0:
+                text_pos['fade_state'] = 0.0
+    
+    def draw(self, surface):
+        """Renderiza el fondo binario en la superficie"""
+        binary_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        
+        for row in range(self.rows):
+            for col in range(self.cols):
+                char = self.grid[row][col]
+                
+                x = col * self.char_size
+                y = row * self.line_height
+                
+                display_char = str(char.value)
+                is_text_char = False
+                
+                for text_pos in self.text_positions:
+                    if (text_pos['row'] == row and 
+                        col >= text_pos['col'] and 
+                        col < text_pos['col'] + len(text_pos['text']) and
+                        text_pos['visible']):
+                        
+                        char_index = col - text_pos['col']
+                        display_char = text_pos['text'][char_index]
+                        is_text_char = True
+                        break
+                
+                if is_text_char:
+                    opacity = int(255 * self.config.text_opacity * 
+                                (0.7 + 0.3 * math.sin(text_pos['fade_state'] * math.pi)))
+                    color = (*self.config.color_scheme, opacity)
+                else:
+                    opacity = int(255 * char.opacity)
+                    color = (*self.config.color_scheme, opacity)
+                
+                if opacity > 10:
+                    char_surface = self.font.render(display_char, True, color[:3])
+                    char_surface.set_alpha(opacity)
+                    binary_surface.blit(char_surface, (x, y))
+        
+        surface.blit(binary_surface, (0, 0))
+
+class FloatingParticle:
+    """Partícula flotante moderna con efectos suaves y números del bingo"""
+    
+    def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.size = size
-        self.initial_value = value
-        self.target_value = target_value
-        self.current_value = value
-        self.delay = delay
-        self.start_time = 0
-        self.cycle_time = 1.2  # Ciclo más lento para efectos dramáticos
-        
-        # Efectos glitch creativos
-        self.glitch_intensity = random.uniform(0.3, 1.0)
-        self.scan_line_offset = random.randint(0, 100)
-        self.digital_noise = [random.randint(0, 255) for _ in range(10)]
-        self.hologram_phase = random.uniform(0, math.pi * 2)
-        self.matrix_trail = []
-        self.energy_level = 0
-        
-        # Efectos Nothing Phone
-        self.led_brightness = 0
-        self.pulse_phase = random.uniform(0, math.pi * 2)
-        self.circuit_pattern = self.generate_circuit_pattern()
-        
-    def generate_circuit_pattern(self):
-        """Genera un patrón de circuito único para cada carta"""
-        pattern = []
-        for i in range(5):
-            pattern.append({
-                'start': (random.randint(0, self.size), random.randint(0, self.size)),
-                'end': (random.randint(0, self.size), random.randint(0, self.size)),
-                'active': False
-            })
-        return pattern
-        
-    def start_animation(self):
-        """Inicia la animación glitch"""
-        if self.start_time == 0:
-            self.start_time = time.time()
-            
-    def update(self):
-        """Actualiza todos los efectos glitch y Nothing Phone"""
-        if self.start_time > 0:
-            current_time = time.time()
-            elapsed_time = current_time - self.start_time
-            
-            if elapsed_time >= self.delay:
-                # Ciclo principal de animación
-                cycle_progress = (elapsed_time - self.delay) % self.cycle_time
-                phase = cycle_progress / self.cycle_time
-                
-                # Determinar estado actual con transiciones dramáticas
-                if phase < 0.3:
-                    # Fase de caos digital
-                    self.current_value = random.choice([0, 1, self.initial_value])
-                    self.energy_level = random.uniform(0.7, 1.0)
-                elif phase < 0.4:
-                    # Fase de transición glitch
-                    self.current_value = random.choice([0, 1])
-                    self.energy_level = 1.0
-                else:
-                    # Fase de revelación
-                    self.current_value = self.target_value
-                    self.energy_level = 0.8 if self.target_value == 1 else 0.2
-                
-                # Actualizar efectos
-                self.update_glitch_effects(current_time)
-                self.update_nothing_effects(current_time)
-                
-    def update_glitch_effects(self, current_time):
-        """Actualiza efectos de glitch digital"""
-        # Actualizar ruido digital
-        if random.random() > 0.9:
-            self.digital_noise = [random.randint(0, 255) for _ in range(10)]
-        
-        # Actualizar líneas de escaneo
-        self.scan_line_offset = (self.scan_line_offset + 2) % (self.size * 2)
-        
-        # Actualizar fase de holograma
-        self.hologram_phase += 0.1
-        
-    def update_nothing_effects(self, current_time):
-        """Actualiza efectos estilo Nothing Phone"""
-        # Brillo LED pulsante
-        self.led_brightness = 0.5 + 0.5 * math.sin(current_time * 3 + self.pulse_phase)
-        
-        # Activar circuitos aleatoriamente
-        for circuit in self.circuit_pattern:
-            if random.random() > 0.95:
-                circuit['active'] = not circuit['active']
-                
-    def draw(self, screen):
-        """Dibuja la carta con efectos glitch y Nothing Phone espectaculares"""
-        current_time = pygame.time.get_ticks()
-        display_value = self.current_value
-        
-        # Crear superficie para efectos complejos
-        card_surface = pygame.Surface((self.size + 8, self.size + 8), pygame.SRCALPHA)
-        
-        if display_value == 1:
-            # ===== EFECTO NOTHING PHONE PARA VALOR 1 =====
-            self.draw_nothing_phone_effect(card_surface, current_time)
-        else:
-            # ===== EFECTO GLITCH PARA VALOR 0 =====
-            self.draw_glitch_effect(card_surface, current_time)
-        
-        # Dibujar en pantalla
-        screen.blit(card_surface, (self.x - 4, self.y - 4))
-        
-        # Efectos adicionales en pantalla
-        self.draw_screen_effects(screen, current_time)
-    
-    def draw_nothing_phone_effect(self, surface, current_time):
-        """Efecto inspirado en Nothing Phone para las letras BINGO"""
-        # Fondo transparente con circuitos LED
-        surface.fill((0, 0, 0, 0))
-        
-        # Circuitos LED brillantes
-        for circuit in self.circuit_pattern:
-            if circuit['active']:
-                # Línea LED brillante
-                led_color = (255, 255, 255, int(255 * self.led_brightness))
-                start_pos = (circuit['start'][0] + 4, circuit['start'][1] + 4)
-                end_pos = (circuit['end'][0] + 4, circuit['end'][1] + 4)
-                
-                # Dibujar línea con grosor variable
-                thickness = int(2 + self.led_brightness * 2)
-                pygame.draw.line(surface, cfg.WHITE, start_pos, end_pos, thickness)
-                
-                # Efecto de brillo
-                glow_surface = pygame.Surface((self.size + 8, self.size + 8), pygame.SRCALPHA)
-                pygame.draw.line(glow_surface, (*cfg.HIGHLIGHT_COLOR[:3], int(100 * self.led_brightness)), 
-                               start_pos, end_pos, thickness + 2)
-                surface.blit(glow_surface, (0, 0))
-        
-        # Marco LED perimetral
-        led_alpha = int(200 * self.led_brightness)
-        if led_alpha > 0:
-            # Esquinas LED
-            corner_size = 8
-            corners = [
-                (4, 4), (self.size - 4, 4),
-                (4, self.size - 4), (self.size - 4, self.size - 4)
-            ]
-            
-            for corner in corners:
-                pygame.draw.circle(surface, (*cfg.HIGHLIGHT_COLOR[:3], led_alpha), 
-                                 (corner[0] + 4, corner[1] + 4), corner_size)
-        
-        # Texto holográfico
-        font_size = int(self.size * 0.6)
-        font = pygame.font.Font(None, font_size)
-        
-        # Efecto holográfico con múltiples capas
-        for i in range(3):
-            alpha = int(255 - i * 60)
-            holo_color = (*cfg.HIGHLIGHT_COLOR[:3], alpha)
-            text = font.render("█", True, cfg.WHITE)  # Bloque sólido
-            text_rect = text.get_rect(center=(self.size // 2 + 4 + i, self.size // 2 + 4 + i))
-            surface.blit(text, text_rect)
-    
-    def draw_glitch_effect(self, surface, current_time):
-        """Efecto glitch digital para el fondo"""
-        # Fondo con ruido digital
-        for i in range(0, self.size + 8, 2):
-            for j in range(0, self.size + 8, 2):
-                if random.random() > 0.85:
-                    noise_color = random.choice([(20, 20, 30), (30, 30, 40), (10, 10, 20)])
-                    pygame.draw.rect(surface, noise_color, (i, j, 2, 2))
-        
-        # Líneas de escaneo
-        scan_y = (current_time // 50) % (self.size + 8)
-        for i in range(3):
-            alpha = 100 - i * 30
-            if alpha > 0:
-                scan_color = (0, 255, 100, alpha)
-                scan_surface = pygame.Surface((self.size + 8, 2), pygame.SRCALPHA)
-                scan_surface.fill(scan_color)
-                surface.blit(scan_surface, (0, scan_y + i))
-        
-        # Fragmentos glitch
-        if random.random() > 0.9:
-            fragment_width = random.randint(5, 15)
-            fragment_height = random.randint(2, 5)
-            fragment_x = random.randint(0, self.size - fragment_width)
-            fragment_y = random.randint(0, self.size - fragment_height)
-            
-            # Desplazar fragmento
-            offset_x = random.randint(-3, 3)
-            glitch_color = (random.randint(0, 100), random.randint(100, 255), random.randint(0, 100))
-            pygame.draw.rect(surface, glitch_color, 
-                           (fragment_x + offset_x + 4, fragment_y + 4, fragment_width, fragment_height))
-        
-        # Punto central sutil
-        center_color = (100, 100, 120, 150)
-        pygame.draw.circle(surface, cfg.GRAY, (self.size // 2 + 4, self.size // 2 + 4), 2)
-    
-    def draw_screen_effects(self, screen, current_time):
-        """Efectos adicionales que se dibujan directamente en pantalla"""
-        if self.current_value == 1 and self.energy_level > 0.7:
-            # Partículas de energía
-            if random.random() > 0.92:
-                particle_x = self.x + random.randint(-10, self.size + 10)
-                particle_y = self.y + random.randint(-10, self.size + 10)
-                particle_size = random.randint(1, 4)
-                particle_color = random.choice([cfg.WHITE, cfg.HIGHLIGHT_COLOR, (0, 255, 200)])
-                pygame.draw.circle(screen, particle_color, (particle_x, particle_y), particle_size)
-            
-            # Rayos de conexión ocasionales
-            if random.random() > 0.98:
-                ray_end_x = self.x + random.randint(-50, 50)
-                ray_end_y = self.y + random.randint(-50, 50)
-                pygame.draw.line(screen, (*cfg.HIGHLIGHT_COLOR[:3], 100), 
-                               (self.x + self.size // 2, self.y + self.size // 2),
-                               (ray_end_x, ray_end_y), 1)
-
-class BouncingWaveParticle:
-    def __init__(self, x, y, amplitude, frequency, phase, color):
         self.base_x = x
         self.base_y = y
-        self.x = x
-        self.y = y
-        self.amplitude = amplitude
-        self.frequency = frequency
-        self.phase = phase
-        self.color = color
-        self.life = 1.0
-        self.size = random.randint(30, 45)  # Tamaño grande como antes
+        self.size = random.randint(25, 40)  # Tamaño mucho más grande
+        self.speed = random.uniform(0.5, 2.0)
+        self.amplitude = random.uniform(20, 60)
+        self.frequency = random.uniform(0.01, 0.03)
+        self.phase = random.uniform(0, math.pi * 2)
+        self.opacity = random.uniform(0.4, 0.9)  # Más opacidad
+        self.color = random.choice([
+            cfg.PRIMARY_COLOR,
+            cfg.SECONDARY_COLOR,
+            cfg.HIGHLIGHT_COLOR,
+            cfg.WHITE
+        ])
+        self.life_time = 0
         self.number = random.randint(1, 90)  # Número aleatorio del 1 al 90
+        self.font = pygame.font.Font(None, int(self.size * 0.8))  # Fuente proporcional al tamaño
         
-        # Añadir velocidades para el rebote
-        self.vel_x = random.uniform(-1.5, 1.5)
-        self.vel_y = random.uniform(-1.5, 1.5)
+    def update(self, delta_time):
+        self.life_time += delta_time
         
-        # Colores que cambian al rebotar
-        self.colors = [
-            cfg.HIGHLIGHT_COLOR,  # Ámbar
-            cfg.WHITE,            # Blanco
-            (0, 255, 200),        # Cian
-            (255, 100, 255),      # Magenta
-            (100, 255, 100),      # Verde claro
-            (255, 200, 100)       # Naranja
-        ]
-        self.color_index = random.randint(0, len(self.colors) - 1)
+        # Movimiento ondulatorio suave
+        self.x = self.base_x + math.sin(self.life_time * self.frequency + self.phase) * self.amplitude
+        self.y = self.base_y + math.cos(self.life_time * self.frequency * 0.7 + self.phase) * self.amplitude * 0.5
         
-    def update(self, wave_time):
-        # Movimiento ondulatorio estilo Hokusai (como antes)
-        wave_x = self.base_x + math.sin(wave_time * self.frequency + self.phase) * self.amplitude * 0.5
-        wave_y = self.base_y + math.cos(wave_time * self.frequency * 0.7 + self.phase) * self.amplitude * 0.3
+        # Movimiento vertical lento
+        self.base_y -= self.speed * delta_time * 10
         
-        # Añadir movimiento de rebote
-        self.x = wave_x + self.vel_x * wave_time * 10
-        self.y = wave_y + self.vel_y * wave_time * 10
-        
-        # Rebote en los bordes con cambio de color
-        bounced = False
-        
-        # Rebote horizontal
-        if self.x <= self.size or self.x >= cfg.WIDTH - self.size:
-            self.vel_x = -self.vel_x
-            bounced = True
+        # Reiniciar si sale de la pantalla
+        if self.base_y < -50:
+            self.base_y = cfg.HEIGHT + 50
+            self.base_x = random.randint(0, cfg.WIDTH)
+            self.number = random.randint(1, 90)  # Nuevo número aleatorio
             
-        # Rebote vertical
-        if self.y <= self.size or self.y >= cfg.HEIGHT - self.size:
-            self.vel_y = -self.vel_y
-            bounced = True
-            
-        # Cambiar color al rebotar
-        if bounced:
-            self.color_index = (self.color_index + 1) % len(self.colors)
-            self.number = random.randint(1, 90)
-            
-        # Mantener dentro de los límites
-        self.x = max(self.size, min(cfg.WIDTH - self.size, self.x))
-        self.y = max(self.size, min(cfg.HEIGHT - self.size, self.y))
+        # Variación de opacidad
+        self.opacity = 0.4 + 0.5 * abs(math.sin(self.life_time * 0.02))
         
-        # Efecto de desvanecimiento (como antes)
-        self.life -= 0.002
-        if self.life <= 0:
-            self.life = 1.0
-            self.number = random.randint(1, 90)  # Cambiar número cuando se reinicia la partícula
-            
-    def draw(self, screen):
-        alpha = int(255 * self.life)
-        current_color = self.colors[self.color_index]
-        color_with_alpha = (*current_color, alpha)
+    def draw(self, surface):
+        alpha = int(255 * self.opacity)
+        color_with_alpha = (*self.color[:3], alpha)
         
-        # Crear superficie con alpha para el número
-        font = pygame.font.Font(None, self.size)
-        text_surface = font.render(str(self.number), True, color_with_alpha)
+        # Crear superficie con alpha más grande
+        particle_surface = pygame.Surface((self.size * 3, self.size * 3), pygame.SRCALPHA)
         
-        # Crear superficie con alpha
-        particle_surface = pygame.Surface((self.size * 2, self.size * 2), pygame.SRCALPHA)
+        # Efecto de brillo más pronunciado
+        for i in range(5, 0, -1):
+            glow_alpha = alpha // (i + 1)
+            glow_color = (*self.color[:3], glow_alpha)
+            pygame.draw.circle(particle_surface, glow_color, 
+                             (self.size * 1.5, self.size * 1.5), self.size + i * 2)
         
-        # Dibujar círculo de fondo semi-transparente con color dinámico
-        bg_color = (*current_color, alpha // 3)  # Fondo con color dinámico
-        pygame.draw.circle(particle_surface, bg_color, (self.size, self.size), self.size // 2)
+        # Fondo circular de la partícula
+        pygame.draw.circle(particle_surface, color_with_alpha, 
+                         (int(self.size * 1.5), int(self.size * 1.5)), self.size)
         
-        # Centrar el texto en la superficie
-        text_rect = text_surface.get_rect(center=(self.size, self.size))
-        particle_surface.blit(text_surface, text_rect)
+        # Dibujar el número en el centro
+        number_text = self.font.render(str(self.number), True, cfg.WHITE)
+        number_rect = number_text.get_rect(center=(self.size * 1.5, self.size * 1.5))
+        particle_surface.blit(number_text, number_rect)
         
-        screen.blit(particle_surface, (self.x - self.size, self.y - self.size))
+        surface.blit(particle_surface, (self.x - self.size * 1.5, self.y - self.size * 1.5))
 
 class TitleScreen:
+    """Pantalla de título moderna y elegante"""
+    
     def __init__(self, screen):
         self.screen = screen
-        self.font_title = pygame.font.Font(None, 120)  # Aumentado tamaño de la fuente del título
-        self.font_button = pygame.font.Font(None, 72)   # Aumentado tamaño de la fuente del botón
-        self.font_small = pygame.font.Font(None, 48)    # Aumentado tamaño de la fuente pequeña
+        self.clock = pygame.time.Clock()
         
-        # Configurar patrones para la animación
-        self.setup_patterns()
+        # Fuentes modernas
+        self.font_title = pygame.font.Font(None, 180)
+        self.font_subtitle = pygame.font.Font(None, 48)
+        self.font_button = pygame.font.Font(None, 36)
+        self.font_small = pygame.font.Font(None, 28)
         
-        # Control del bucle de patrones
-        self.current_pattern_index = 0
-        self.pattern_change_interval = 3.0  # Cambiar cada 3 segundos
-        self.last_pattern_change = time.time()
+        # Configurar fondo binario más visible
+        binary_config = BinaryBackgroundConfig(
+            density=0.8,  # Más densidad
+            animation_speed=1.0,
+            base_opacity=0.25,  # Más opacidad
+            text_opacity=0.4,   # Más opacidad para el texto
+            color_scheme=(80, 120, 160)  # Colores más brillantes
+        )
+        self.binary_background = BinaryBackground(cfg.WIDTH, cfg.HEIGHT, binary_config)
         
-        # Configurar las cartas
-        self.setup_cards()
-        
-        # Configurar partículas de ola
-        self.setup_bouncing_wave_particles()
-        
-        # Estado de animación
-        self.animation_started = False
-        self.animation_start_time = 0
-        self.wave_time = 0
-        self.pattern_duration = 1.5  # Duración de cada letra en segundos (1.5s es óptimo)
-        self.flip_in_progress = False
-        self.current_letter = "B"  # Para mostrar la letra actual
-        
-        # Botón de iniciar
-        button_width = 400
-        button_height = 80
-        self.button_rect = pygame.Rect(0, 0, button_width, button_height)
-        self.button_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + 580)  # Bajado de 500 a 580
-        self.button_hover = False
-        
-    def setup_patterns(self):
-        """Configura un patrón espectacular para la palabra BINGO completa"""
-        
-        # Patrón ESPECTACULAR para "BINGO" - 15 filas x 45 columnas para máxima definición
-        self.bingo_pattern = [
-            # B        I        N        G        O
-            [1,1,1,1,1,1,0,0,1,1,1,1,1,0,0,1,0,0,0,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,1,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,1,1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,1,1,1,1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,1,1,1,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
-            [1,0,0,0,0,1,0,0,1,1,1,1,1,0,0,1,0,0,0,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0],
-            [1,1,1,1,1,1,0,0,1,1,1,1,1,0,0,1,0,0,0,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0]
-        ]
-
-        # La lista de patrones ahora solo contiene el patrón BINGO completo
-        self.patterns = [self.bingo_pattern]
-
-    def setup_cards(self):
-        self.cards = []
-        # Configuración ESPECTACULAR para matriz 15x45 (matriz gigante y detallada)
-        rows, cols = 15, 45
-        card_size = 25  # Tamaño optimizado para la matriz gigante
-        spacing = 3     # Espaciado mínimo para máxima densidad visual
-        
-        # Calcular posición inicial para centrar la matriz
-        total_width = cols * (card_size + spacing) - spacing
-        total_height = rows * (card_size + spacing) - spacing
-        start_x = (cfg.WIDTH - total_width) // 2
-        start_y = (cfg.HEIGHT - total_height) // 2 - 200  # Subir más la matriz de cartas
-        
-        # Usar el patrón actual del bucle
-        current_pattern = self.patterns[self.current_pattern_index]
-        
-        # Crear las cartas
-        for row in range(rows):
-            for col in range(cols):
-                x = start_x + col * (card_size + spacing)
-                y = start_y + row * (card_size + spacing)
-                
-                # Valor inicial aleatorio (0 o 1)
-                initial_value = random.randint(0, 1)
-                # Verificar límites del patrón
-                if row < len(current_pattern) and col < len(current_pattern[0]):
-                    target_value = current_pattern[row][col]
-                else:
-                    target_value = 0  # Valor por defecto fuera del patrón
-                
-                # Retraso progresivo basado en la distancia del centro
-                center_x = cols // 2
-                center_y = rows // 2
-                distance = math.sqrt((col - center_x) ** 2 + (row - center_y) ** 2)
-                delay = distance * 0.02  # Retraso reducido para animación más rápida
-                
-                card = GlitchCard(x, y, card_size, initial_value, target_value, delay)
-                self.cards.append(card)
-    
-    def setup_bouncing_wave_particles(self):
-        self.bouncing_particles = []
-        
-        # Crear partículas ondulatorias con rebote (como antes pero con rebotes)
-        for i in range(200):  # Cantidad original para efecto espectacular
+        # Partículas flotantes (más cantidad)
+        self.particles = []
+        for _ in range(80):  # Aumentado de 50 a 80
             x = random.randint(0, cfg.WIDTH)
             y = random.randint(0, cfg.HEIGHT)
-            amplitude = random.randint(20, 80)
-            frequency = random.uniform(0.5, 2.0)
-            phase = random.uniform(0, 2 * math.pi)
-            color = random.choice([cfg.HIGHLIGHT_COLOR, cfg.PRIMARY_COLOR, cfg.SECONDARY_COLOR])
-            
-            particle = BouncingWaveParticle(x, y, amplitude, frequency, phase, color)
-            self.bouncing_particles.append(particle)
-    
+            self.particles.append(FloatingParticle(x, y))
+        
+        # Estado de animación
+        self.animation_time = 0
+        self.title_animation_phase = 0
+        self.title_letters = "BINGACHO"
+        self.visible_letters = 0
+        self.letter_reveal_time = 0.3  # Tiempo entre letras
+        self.last_letter_time = 0
+        
+        # Estado del menú
+        self.show_game_menu = False
+        self.selected_game_mode = 0  # 0 = normal, 1 = alterno
+        
+        # Botones de juego
+        self.setup_buttons()
+        
+        # Efectos visuales
+        self.pulse_time = 0
+        self.glow_intensity = 0
+        
+        # Estado de animación para compatibilidad
+        self.animation_started = False
+        
     def start_animation(self):
-        if not self.animation_started:
-            self.animation_started = True
-            self.animation_start_time = time.time()
-            self.is_flipping = False
+        """Inicia la animación (compatibilidad con main.py)"""
+        self.animation_started = True
+        self.animation_time = 0
         
-    def start_flipping_cards(self):
-        # Iniciar la animación de flip para todas las cartas
-        for card in self.cards:
-            card.start_animation()
-    
-    def change_pattern(self):
-        """Cambiar al siguiente patrón y actualizar las cartas"""
-        self.current_pattern_index = (self.current_pattern_index + 1) % len(self.patterns)
-        current_pattern = self.patterns[self.current_pattern_index]
+    def setup_buttons(self):
+        """Configura los botones del menú"""
+        button_width = 350
+        button_height = 70
         
-        # Actualizar los valores objetivo de las cartas existentes
-        card_index = 0
-        for row in range(len(current_pattern)):
-            for col in range(len(current_pattern[row])):
-                if card_index < len(self.cards):
-                    self.cards[card_index].target_value = current_pattern[row][col]
-                    self.cards[card_index].start_flip()
-                    card_index += 1
+        # Botón principal de inicio
+        self.start_button_rect = pygame.Rect(0, 0, button_width, button_height)
+        self.start_button_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT - 200)
+        self.start_button_hover = False
         
-        # Reiniciar el tiempo de último cambio
-        self.last_pattern_change = time.time()
-                
+        # Botones de modo de juego
+        game_button_width = 400
+        game_button_height = 80
+        
+        # Botón juego normal
+        self.normal_game_rect = pygame.Rect(0, 0, game_button_width, game_button_height)
+        self.normal_game_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + 100)
+        self.normal_game_hover = False
+        
+        # Botón juego alterno
+        self.alt_game_rect = pygame.Rect(0, 0, game_button_width, game_button_height)
+        self.alt_game_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + 200)
+        self.alt_game_hover = False
+        
+        # Botón volver
+        back_button_width = 200
+        back_button_height = 50
+        self.back_button_rect = pygame.Rect(0, 0, back_button_width, back_button_height)
+        self.back_button_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + 320)
+        self.back_button_hover = False
+        
     def update(self):
-        # Actualizar tiempo de ola
-        self.wave_time += 0.05
+        """Actualiza todos los elementos de la pantalla"""
+        delta_time = self.clock.tick(60) / 1000.0
+        self.animation_time += delta_time
+        self.pulse_time += delta_time
         
-        # Actualizar cartas
-        for card in self.cards:
-            card.update()
-            
-        # Actualizar partículas ondulatorias con rebote
-        for particle in self.bouncing_particles:
-            particle.update(self.wave_time)
-            
-        # Iniciar la animación de flip para mostrar la palabra BINGO completa
-        # Solo lo hacemos una vez al inicio y luego se queda estático
-        current_time = time.time()
-        if not getattr(self, 'is_flipping', False) and current_time - self.animation_start_time > 1.0:
-            # Iniciar la animación de revelar BINGO completo
-            self.start_flipping_cards()
-            self.is_flipping = True
-            print("Mostrando palabra BINGO completa estática")
-
-        # Actualizar animación del botón
-        self.button_anim_time = getattr(self, 'button_anim_time', 0) + 0.05
-        if self.button_hover:
-            self.button_scale = 1.0 + 0.1 * abs(math.sin(self.button_anim_time * 5))
+        # Actualizar fondo binario
+        self.binary_background.update(delta_time)
+        
+        # Actualizar partículas
+        for particle in self.particles:
+            particle.update(delta_time)
+        
+        # Animación del título
+        self.update_title_animation(delta_time)
+        
+        # Efectos de brillo
+        self.glow_intensity = 0.5 + 0.5 * math.sin(self.pulse_time * 2)
+        
+    def update_title_animation(self, delta_time):
+        """Actualiza la animación del título"""
+        if self.animation_time > 1.0:  # Esperar 1 segundo antes de empezar
+            if self.visible_letters < len(self.title_letters):
+                if self.animation_time - self.last_letter_time > self.letter_reveal_time:
+                    self.visible_letters += 1
+                    self.last_letter_time = self.animation_time
+            else:
+                # Reiniciar después de 5 segundos
+                if self.animation_time - self.last_letter_time > 5.0:
+                    self.visible_letters = 0
+                    self.last_letter_time = self.animation_time
     
     def handle_event(self, event):
+        """Maneja los eventos de entrada"""
         if event.type == MOUSEMOTION:
-            self.button_hover = self.button_rect.collidepoint(event.pos)
+            if not self.show_game_menu:
+                self.start_button_hover = self.start_button_rect.collidepoint(event.pos)
+            else:
+                self.normal_game_hover = self.normal_game_rect.collidepoint(event.pos)
+                self.alt_game_hover = self.alt_game_rect.collidepoint(event.pos)
+                self.back_button_hover = self.back_button_rect.collidepoint(event.pos)
+                
         elif event.type == MOUSEBUTTONDOWN:
-            if self.button_rect.collidepoint(event.pos):
-                return "start_game"
+            if not self.show_game_menu:
+                if self.start_button_rect.collidepoint(event.pos):
+                    self.show_game_menu = True
+            else:
+                if self.normal_game_rect.collidepoint(event.pos):
+                    return "start_normal_game"
+                elif self.alt_game_rect.collidepoint(event.pos):
+                    return "start_alt_game"
+                elif self.back_button_rect.collidepoint(event.pos):
+                    self.show_game_menu = False
+                    
         elif event.type == KEYDOWN:
             if event.key == K_SPACE or event.key == K_RETURN:
-                return "start_game"
+                if not self.show_game_menu:
+                    self.show_game_menu = True
+                else:
+                    return "start_normal_game"  # Por defecto juego normal
             elif event.key == K_ESCAPE:
-                return "exit_game"
+                if self.show_game_menu:
+                    self.show_game_menu = False
+                else:
+                    return "exit_game"
         return None
     
     def draw(self):
-        # Fondo con gradiente espectacular
+        """Dibuja toda la pantalla"""
+        # Fondo degradado
         self.draw_gradient_background()
         
-        # Partículas ondulatorias con rebote
-        for particle in self.bouncing_particles:
+        # Fondo binario
+        self.binary_background.draw(self.screen)
+        
+        # Partículas flotantes
+        for particle in self.particles:
             particle.draw(self.screen)
         
-        # Efecto de resplandor detrás de la matriz
-        matrix_center_x = cfg.WIDTH // 2
-        matrix_center_y = cfg.HEIGHT // 2 - 150
+        if not self.show_game_menu:
+            # Pantalla principal
+            # Título principal
+            self.draw_title()
+            
+            # Subtítulo
+            self.draw_subtitle()
+            
+            # Botón de inicio
+            self.draw_start_button()
+            
+            # Instrucciones
+            self.draw_instructions()
+        else:
+            # Menú de selección de juego
+            self.draw_game_menu()
         
-        # Resplandor circular detrás de la matriz
-        for i in range(8, 0, -1):
-            alpha = int(30 - i * 3)
-            if alpha > 0:
-                glow_surface = pygame.Surface((cfg.WIDTH, cfg.HEIGHT), pygame.SRCALPHA)
-                pygame.draw.circle(glow_surface, (*cfg.HIGHLIGHT_COLOR[:3], alpha), 
-                                 (matrix_center_x, matrix_center_y), i * 50)
-                self.screen.blit(glow_surface, (0, 0))
-        
-        # Cartas con la matriz BINGO
-        for card in self.cards:
-            card.draw(self.screen)
-        
-        # Título principal con efectos
-        current_time = pygame.time.get_ticks()
-        title_pulse = 0.9 + 0.1 * math.sin(current_time / 1000)
-        
-        # Sombra del título
-        title_shadow = self.font_title.render("BINGACHO", True, (0, 0, 0))
-        title_shadow_rect = title_shadow.get_rect(center=(cfg.WIDTH // 2 + 4, cfg.HEIGHT // 2 + 404))
-        self.screen.blit(title_shadow, title_shadow_rect)
-        
-        # Título principal con brillo
-        title_color = (int(cfg.HIGHLIGHT_COLOR[0] * title_pulse), 
-                      int(cfg.HIGHLIGHT_COLOR[1] * title_pulse), 
-                      int(cfg.HIGHLIGHT_COLOR[2] * title_pulse))
-        title = self.font_title.render("BINGACHO", True, title_color)
-        title_rect = title.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT // 2 + 400))
-        self.screen.blit(title, title_rect)
-        
-        # Subtítulo elegante
-        subtitle = self.font_small.render("Juego de Bingo Digital - Creado por Jose Alejandro", True, cfg.WHITE)
-        subtitle_rect = subtitle.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT // 2 + 460))
-        self.screen.blit(subtitle, subtitle_rect)
-        
-        # Sin texto descriptivo - la matriz habla por sí misma
-        
-        # Botón de iniciar
-        self.draw_button()
-        
-        # Instrucciones - ajustadas para el botón más abajo
-        instructions = self.font_small.render("Presiona ESPACIO, ENTER o haz clic en el botón para comenzar", True, cfg.WHITE)
-        instructions_rect = instructions.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT - 140))  # Subidas para dar espacio al botón
-        self.screen.blit(instructions, instructions_rect)
-        
-        # Instrucción adicional para salir
-        exit_instruction = self.font_small.render("Presiona ESC para salir", True, cfg.GRAY)
-        exit_rect = exit_instruction.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT - 100))  # Subida también
-        self.screen.blit(exit_instruction, exit_rect)
-    
     def draw_gradient_background(self):
-        # Crear un fondo con gradiente azul oscuro
+        """Dibuja un fondo con degradado moderno"""
         for y in range(cfg.HEIGHT):
-            color_ratio = y / cfg.HEIGHT
-            r = int(15 + (40 - 15) * color_ratio)
-            g = int(23 + (50 - 23) * color_ratio)
-            b = int(42 + (80 - 42) * color_ratio)
+            ratio = y / cfg.HEIGHT
+            
+            # Degradado de azul oscuro a negro
+            r = int(15 * (1 - ratio))
+            g = int(25 * (1 - ratio))
+            b = int(45 * (1 - ratio))
+            
             pygame.draw.line(self.screen, (r, g, b), (0, y), (cfg.WIDTH, y))
     
-    def draw_button(self):
+    def draw_title(self):
+        """Dibuja el título con animación letra por letra"""
+        title_y = cfg.HEIGHT // 2 - 100
+        
+        # Mostrar solo las letras visibles
+        visible_text = self.title_letters[:self.visible_letters]
+        
+        if visible_text:
+            # Efecto de brillo
+            for i in range(5, 0, -1):
+                glow_alpha = int(30 * self.glow_intensity / i)
+                glow_surface = pygame.Surface((cfg.WIDTH, 200), pygame.SRCALPHA)
+                
+                glow_text = self.font_title.render(visible_text, True, 
+                                                 (*cfg.HIGHLIGHT_COLOR[:3], glow_alpha))
+                glow_rect = glow_text.get_rect(center=(cfg.WIDTH // 2 + i, title_y + i))
+                glow_surface.blit(glow_text, glow_rect)
+                self.screen.blit(glow_surface, (0, 0))
+            
+            # Sombra
+            shadow_text = self.font_title.render(visible_text, True, (0, 0, 0))
+            shadow_rect = shadow_text.get_rect(center=(cfg.WIDTH // 2 + 3, title_y + 3))
+            self.screen.blit(shadow_text, shadow_rect)
+            
+            # Texto principal
+            main_text = self.font_title.render(visible_text, True, cfg.HIGHLIGHT_COLOR)
+            main_rect = main_text.get_rect(center=(cfg.WIDTH // 2, title_y))
+            self.screen.blit(main_text, main_rect)
+    
+    def draw_subtitle(self):
+        """Dibuja el subtítulo"""
+        subtitle_y = cfg.HEIGHT // 2 + 50
+        subtitle_text = "Bingach8 by joseAlejandro"
+        
+        # Sombra
+        shadow = self.font_subtitle.render(subtitle_text, True, (0, 0, 0))
+        shadow_rect = shadow.get_rect(center=(cfg.WIDTH // 2 + 2, subtitle_y + 2))
+        self.screen.blit(shadow, shadow_rect)
+        
+        # Texto principal
+        text = self.font_subtitle.render(subtitle_text, True, cfg.PRIMARY_COLOR)
+        text_rect = text.get_rect(center=(cfg.WIDTH // 2, subtitle_y))
+        self.screen.blit(text, text_rect)
+        
+        # Línea decorativa
+        line_y = subtitle_y + 30
+        line_start = cfg.WIDTH // 2 - 150
+        line_end = cfg.WIDTH // 2 + 150
+        
+        for i in range(3):
+            alpha = int(255 * (1 - i * 0.3))
+            color = (*cfg.PRIMARY_COLOR[:3], alpha)
+            pygame.draw.line(self.screen, color, 
+                           (line_start, line_y + i), (line_end, line_y + i), 2)
+    
+    def draw_start_button(self):
+        """Dibuja el botón de inicio moderno"""
         # Color del botón
-        if self.button_hover:
-            color = cfg.BUTTON_HOVER_COLOR
-            glow_radius = 10
+        if self.start_button_hover:
+            button_color = cfg.SECONDARY_COLOR
+            glow_size = 8
         else:
-            color = cfg.BUTTON_COLOR
-            glow_radius = 5
+            button_color = cfg.PRIMARY_COLOR
+            glow_size = 4
         
         # Efecto de brillo
-        for i in range(glow_radius):
-            glow_color = (*cfg.HIGHLIGHT_COLOR, 255 - i * 20)
-            glow_surface = pygame.Surface((self.button_rect.width + i * 2, self.button_rect.height + i * 2), pygame.SRCALPHA)
-            pygame.draw.rect(glow_surface, glow_color, (0, 0, self.button_rect.width + i * 2, self.button_rect.height + i * 2), 2)
-            self.screen.blit(glow_surface, (self.button_rect.x - i, self.button_rect.y - i))
+        for i in range(glow_size, 0, -1):
+            glow_alpha = int(50 * self.glow_intensity / i)
+            glow_rect = self.start_button_rect.inflate(i * 2, i * 2)
+            glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+            glow_surface.fill((*button_color[:3], glow_alpha))
+            self.screen.blit(glow_surface, glow_rect)
         
         # Botón principal
-        pygame.draw.rect(self.screen, color, self.button_rect)
-        pygame.draw.rect(self.screen, cfg.HIGHLIGHT_COLOR, self.button_rect, 3)
+        pygame.draw.rect(self.screen, button_color, self.start_button_rect, border_radius=15)
+        pygame.draw.rect(self.screen, cfg.WHITE, self.start_button_rect, 2, border_radius=15)
         
         # Texto del botón
-        button_text = self.font_button.render("INICIAR JUEGO", True, cfg.WHITE)
-        button_text_rect = button_text.get_rect(center=self.button_rect.center)
-        self.screen.blit(button_text, button_text_rect)
+        button_text = self.font_button.render("SELECCIONAR JUEGO", True, cfg.WHITE)
+        button_rect = button_text.get_rect(center=self.start_button_rect.center)
+        self.screen.blit(button_text, button_rect)
+    
+    def draw_game_menu(self):
+        """Dibuja el menú de selección de modo de juego"""
+        # Título del menú
+        menu_title = self.font_title.render("SELECCIONA MODO", True, cfg.HIGHLIGHT_COLOR)
+        title_rect = menu_title.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT // 2 - 100))
+        
+        # Sombra del título
+        shadow_title = self.font_title.render("SELECCIONA MODO", True, (0, 0, 0))
+        shadow_rect = shadow_title.get_rect(center=(cfg.WIDTH // 2 + 3, cfg.HEIGHT // 2 - 97))
+        self.screen.blit(shadow_title, shadow_rect)
+        self.screen.blit(menu_title, title_rect)
+        
+        # Botón Juego Normal
+        normal_color = cfg.PRIMARY_COLOR if not self.normal_game_hover else cfg.SECONDARY_COLOR
+        glow_size = 8 if self.normal_game_hover else 4
+        
+        # Efecto de brillo para juego normal
+        for i in range(glow_size, 0, -1):
+            glow_alpha = int(50 * self.glow_intensity / i)
+            glow_rect = self.normal_game_rect.inflate(i * 2, i * 2)
+            glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+            glow_surface.fill((*normal_color[:3], glow_alpha))
+            self.screen.blit(glow_surface, glow_rect)
+        
+        pygame.draw.rect(self.screen, normal_color, self.normal_game_rect, border_radius=15)
+        pygame.draw.rect(self.screen, cfg.WHITE, self.normal_game_rect, 3, border_radius=15)
+        
+        # Texto del botón normal
+        normal_title = self.font_button.render("JUEGO NORMAL", True, cfg.WHITE)
+        normal_desc = self.font_small.render("Tablero 9x10 - Números 1 al 90", True, cfg.LIGHT_GRAY)
+        
+        normal_title_rect = normal_title.get_rect(center=(self.normal_game_rect.centerx, self.normal_game_rect.centery - 15))
+        normal_desc_rect = normal_desc.get_rect(center=(self.normal_game_rect.centerx, self.normal_game_rect.centery + 15))
+        
+        self.screen.blit(normal_title, normal_title_rect)
+        self.screen.blit(normal_desc, normal_desc_rect)
+        
+        # Botón Juego Alterno
+        alt_color = cfg.ACCENT_COLOR if not self.alt_game_hover else cfg.SECONDARY_COLOR
+        glow_size = 8 if self.alt_game_hover else 4
+        
+        # Efecto de brillo para juego alterno
+        for i in range(glow_size, 0, -1):
+            glow_alpha = int(50 * self.glow_intensity / i)
+            glow_rect = self.alt_game_rect.inflate(i * 2, i * 2)
+            glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+            glow_surface.fill((*alt_color[:3], glow_alpha))
+            self.screen.blit(glow_surface, glow_rect)
+        
+        pygame.draw.rect(self.screen, alt_color, self.alt_game_rect, border_radius=15)
+        pygame.draw.rect(self.screen, cfg.WHITE, self.alt_game_rect, 3, border_radius=15)
+        
+        # Texto del botón alterno
+        alt_title = self.font_button.render("JUEGO ALTERNO", True, cfg.WHITE)
+        alt_desc = self.font_small.render("Tablero 7x11 - Números 1 al 75", True, cfg.LIGHT_GRAY)
+        
+        alt_title_rect = alt_title.get_rect(center=(self.alt_game_rect.centerx, self.alt_game_rect.centery - 15))
+        alt_desc_rect = alt_desc.get_rect(center=(self.alt_game_rect.centerx, self.alt_game_rect.centery + 15))
+        
+        self.screen.blit(alt_title, alt_title_rect)
+        self.screen.blit(alt_desc, alt_desc_rect)
+        
+        # Botón Volver
+        back_color = cfg.GRAY if not self.back_button_hover else cfg.LIGHT_GRAY
+        
+        pygame.draw.rect(self.screen, back_color, self.back_button_rect, border_radius=10)
+        pygame.draw.rect(self.screen, cfg.WHITE, self.back_button_rect, 2, border_radius=10)
+        
+        back_text = self.font_small.render("VOLVER", True, cfg.WHITE)
+        back_rect = back_text.get_rect(center=self.back_button_rect.center)
+        self.screen.blit(back_text, back_rect)
+    
+    def draw_instructions(self):
+        """Dibuja las instrucciones"""
+        instructions_y = cfg.HEIGHT - 100
+        
+        # Instrucción principal
+        instruction1 = "Presiona ESPACIO, ENTER o haz clic para seleccionar modo"
+        text1 = self.font_small.render(instruction1, True, cfg.LIGHT_GRAY)
+        rect1 = text1.get_rect(center=(cfg.WIDTH // 2, instructions_y))
+        self.screen.blit(text1, rect1)
+        
+        # Instrucción de salida
+        instruction2 = "Presiona ESC para salir"
+        text2 = self.font_small.render(instruction2, True, cfg.GRAY)
+        rect2 = text2.get_rect(center=(cfg.WIDTH // 2, instructions_y + 25))
+        self.screen.blit(text2, rect2)
+        
+        # Créditos
+        credits = "Creado por Jose Alejandro"
+        credits_text = self.font_small.render(credits, True, cfg.GRAY)
+        credits_rect = credits_text.get_rect(center=(cfg.WIDTH // 2, instructions_y + 50))
+        self.screen.blit(credits_text, credits_rect)
+
+# Función principal para pruebas
+if __name__ == "__main__":
+    pygame.init()
+    screen = pygame.display.set_mode((cfg.WIDTH, cfg.HEIGHT))
+    pygame.display.set_caption("Bingacho - Pantalla de Título")
+    
+    title_screen = TitleScreen(screen)
+    clock = pygame.time.Clock()
+    running = True
+    
+    while running:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                running = False
+            
+            result = title_screen.handle_event(event)
+            if result == "start_game":
+                print("Iniciando juego...")
+                running = False
+            elif result == "exit_game":
+                running = False
+        
+        title_screen.update()
+        title_screen.draw()
+        pygame.display.flip()
+    
+    pygame.quit()
