@@ -152,49 +152,59 @@ fonts = {}
 # Función para cargar fuentes con tamaño responsivo
 def get_adaptive_config():
     """
-    Obtiene configuración adaptativa según la resolución y layout
+    Obtiene configuración adaptativa según la resolución y layout usando config.py
     """
+    # Usar la configuración de resolución del config.py
+    resolution_config = cfg.get_resolution_config()
     layout = get_responsive_layout()
     
-    # Configuraciones base según el tipo de pantalla
+    # Configuraciones base mejoradas según el tipo de pantalla
     configs = {
         "ultrawide": {
-            "board_cell_size": 48,
-            "history_width_ratio": 0.20,
-            "current_number_size": 200,
-            "button_height": 60,
-            "spacing_multiplier": 1.2
+            "board_cell_size": resolution_config["board_cell_size"] + 15,  # Mucho más grande
+            "history_width_ratio": 0.16,
+            "current_number_size": resolution_config["current_number_size"] + 40,
+            "button_height": 80,
+            "spacing_multiplier": resolution_config["spacing_multiplier"] + 0.2,
+            "title_margin": resolution_config["title_margin"] + 20,
+            "board_margin_top": resolution_config["board_margin_top"] + 40
         },
         "widescreen": {
-            "board_cell_size": 42,
-            "history_width_ratio": 0.24,
-            "current_number_size": 180,
-            "button_height": 56,
-            "spacing_multiplier": 1.0
+            "board_cell_size": resolution_config["board_cell_size"] + 10,  # Mucho más grande
+            "history_width_ratio": 0.20,
+            "current_number_size": resolution_config["current_number_size"] + 20,
+            "button_height": 75,
+            "spacing_multiplier": resolution_config["spacing_multiplier"] + 0.1,
+            "title_margin": resolution_config["title_margin"] + 10,
+            "board_margin_top": resolution_config["board_margin_top"] + 20
         },
         "standard": {
-            "board_cell_size": 38,
-            "history_width_ratio": 0.26,
-            "current_number_size": 160,
-            "button_height": 52,
-            "spacing_multiplier": 0.9
+            "board_cell_size": resolution_config["board_cell_size"],  # Usar tamaño base mejorado
+            "history_width_ratio": 0.22,
+            "current_number_size": resolution_config["current_number_size"],
+            "button_height": 70,
+            "spacing_multiplier": resolution_config["spacing_multiplier"],
+            "title_margin": resolution_config["title_margin"],
+            "board_margin_top": resolution_config["board_margin_top"]
         },
         "portrait": {
-            "board_cell_size": 32,
-            "history_width_ratio": 0.30,
-            "current_number_size": 140,
-            "button_height": 48,
-            "spacing_multiplier": 0.8
+            "board_cell_size": max(40, resolution_config["board_cell_size"] - 5),  # Mínimo 40px
+            "history_width_ratio": 0.25,
+            "current_number_size": max(140, resolution_config["current_number_size"] - 20),
+            "button_height": 65,
+            "spacing_multiplier": max(0.7, resolution_config["spacing_multiplier"] - 0.1),
+            "title_margin": max(50, resolution_config["title_margin"] - 10),
+            "board_margin_top": max(140, resolution_config["board_margin_top"] - 20)
         }
     }
     
     base_config = configs[layout["type"]]
     
-    # Ajustar según el tamaño de pantalla
+    # Ajustar según el tamaño de pantalla con multiplicadores más agresivos
     size_multipliers = {
-        "large": 1.2,
+        "large": 1.3,   # Aumentado de 1.2 a 1.3
         "medium": 1.0,
-        "small": 0.8
+        "small": 0.85   # Aumentado de 0.8 a 0.85
     }
     
     multiplier = size_multipliers[layout["size"]]
@@ -577,18 +587,18 @@ def draw_board():
     # Obtener configuración adaptativa
     adaptive_config = get_adaptive_config()
     
-    # Configuración responsiva del tablero
-    cell_size = scale_value(adaptive_config["board_cell_size"], min_value=24, max_value=60)
-    cell_spacing = scale_value(int(adaptive_config["board_cell_size"] * 0.07), min_value=2, max_value=8)
-    corner_radius = scale_value(6, min_value=3, max_value=12)
+    # Configuración responsiva del tablero con mejor escalado
+    cell_size = scale_value(adaptive_config["board_cell_size"], min_value=50, max_value=120)  # Aumentado mínimo y máximo
+    cell_spacing = scale_value(int(adaptive_config["board_cell_size"] * 0.12), min_value=5, max_value=18)  # Más espaciado
+    corner_radius = scale_value(10, min_value=6, max_value=20)  # Bordes más redondeados
     
     # Calcular dimensiones del tablero
     board_width = cfg.BOARD_COLS * cell_size + (cfg.BOARD_COLS - 1) * cell_spacing
     board_height = cfg.BOARD_ROWS * cell_size + (cfg.BOARD_ROWS - 1) * cell_spacing
     
-    # Posicionamiento centrado y optimizado
+    # Posicionamiento centrado con margen superior mejorado para evitar superposición
     board_x = (cfg.WIDTH - board_width) // 2
-    board_y = scale_value(140, False)  # Posición equilibrada
+    board_y = scale_value(adaptive_config["board_margin_top"], False, min_value=200, max_value=400)  # Usar margen del config
     
     # Contenedor del tablero con diseño moderno
     container_padding = scale_value(20)
@@ -611,19 +621,14 @@ def draw_board():
     # Borde del contenedor
     draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, container_rect, scale_value(12), scale_value(2))
     
-    # Título del tablero moderno
-    title_y = container_rect.top - scale_value(50, False)
+    # Título del tablero moderno con mejor espaciado
+    title_y = container_rect.top - scale_value(70, False, min_value=50, max_value=100)
     title_font = fonts["title_small"]
     title_text = title_font.render("TABLERO DE NÚMEROS", True, cfg.TEXT_COLOR)
     title_rect = title_text.get_rect(center=(container_rect.centerx, title_y))
     screen.blit(title_text, title_rect)
     
-    # Subtítulo con información del modo
-    mode_text = f"Modo: {cfg.BOARD_ROWS}×{cfg.BOARD_COLS} | Números 1-{cfg.TOTAL_NUMBERS}"
-    subtitle_font = fonts["number_small"]
-    subtitle_surface = subtitle_font.render(mode_text, True, cfg.GRAY)
-    subtitle_rect = subtitle_surface.get_rect(center=(container_rect.centerx, title_y + scale_value(25, False)))
-    screen.blit(subtitle_surface, subtitle_rect)
+
     
     # Dibujar celdas del tablero con diseño moderno
     for row in range(cfg.BOARD_ROWS):
@@ -905,13 +910,16 @@ def draw_current_number():
         # Obtener configuración adaptativa
         adaptive_config = get_adaptive_config()
         
-        # Configuración del contenedor moderno
+        # Configuración del contenedor moderno con tamaño optimizado
         base_size = adaptive_config["current_number_size"]
-        container_width = scale_value(base_size * 1.2, min_value=180, max_value=300)
-        container_height = scale_value(base_size, min_value=120, max_value=200)
-        container_x = scale_value(24, min_value=16, max_value=48)
-        container_y = scale_value(24, False, min_value=16, max_value=48)
-        corner_radius = scale_value(12, min_value=6, max_value=16)
+        container_width = scale_value(base_size * 1.2, min_value=250, max_value=400)  # Más compacto
+        container_height = scale_value(base_size * 0.7, min_value=160, max_value=280)  # Más bajo para evitar interferencia
+        
+        # Posicionamiento alineado con el historial para mejor balance visual
+        container_x = scale_value(60, min_value=40, max_value=120)  # Margen izquierdo
+        # Posicionar a la misma altura que el historial (lado derecho) - 1px más abajo
+        container_y = scale_value(25, False, min_value=17, max_value=49)  # Misma Y que el historial + 1px
+        corner_radius = scale_value(18, min_value=10, max_value=25)  # Bordes más redondeados
         
         # Determinar colores según el rango del número
         number_color, glow_color = get_number_color_and_glow(game_state.current_number)
@@ -1061,7 +1069,7 @@ def draw_number_history():
     panel_width = int(cfg.WIDTH * adaptive_config["history_width_ratio"])
     panel_height = int(cfg.HEIGHT * 0.7)  # Mantener proporción vertical
     panel_x = cfg.WIDTH - panel_width - scale_value(24, min_value=16, max_value=32)
-    panel_y = scale_value(24, False, min_value=16, max_value=48)
+    panel_y = scale_value(25, False, min_value=17, max_value=49)
     
     panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
     corner_radius = scale_value(12)

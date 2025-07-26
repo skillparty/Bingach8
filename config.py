@@ -8,6 +8,58 @@ HEIGHT = 2234
 FULLSCREEN = True
 TITLE = "Bingacho"
 
+# Configuración de resolución adaptativa
+RESOLUTION_CONFIGS = {
+    # Configuraciones para diferentes resoluciones
+    "4K": {
+        "min_width": 3000,
+        "board_cell_size": 85,
+        "current_number_size": 320,
+        "title_margin": 120,
+        "board_margin_top": 380,  # Aumentado para dar más espacio
+        "spacing_multiplier": 1.4
+    },
+    "2K": {
+        "min_width": 2000,
+        "board_cell_size": 70,
+        "current_number_size": 260,
+        "title_margin": 100,
+        "board_margin_top": 320,  # Aumentado para dar más espacio
+        "spacing_multiplier": 1.2
+    },
+    "1080p": {
+        "min_width": 1500,
+        "board_cell_size": 55,
+        "current_number_size": 200,
+        "title_margin": 80,
+        "board_margin_top": 200,
+        "spacing_multiplier": 1.0
+    },
+    "720p": {
+        "min_width": 1000,
+        "board_cell_size": 45,
+        "current_number_size": 160,
+        "title_margin": 60,
+        "board_margin_top": 160,
+        "spacing_multiplier": 0.8
+    },
+    "small": {
+        "min_width": 0,
+        "board_cell_size": 35,
+        "current_number_size": 120,
+        "title_margin": 40,
+        "board_margin_top": 120,
+        "spacing_multiplier": 0.6
+    }
+}
+
+def get_resolution_config():
+    """Obtiene la configuración óptima según la resolución actual"""
+    for config_name, config in RESOLUTION_CONFIGS.items():
+        if WIDTH >= config["min_width"]:
+            return config
+    return RESOLUTION_CONFIGS["small"]
+
 # Colores - Nueva paleta moderna
 WHITE = (255, 255, 255)  # Blanco puro para fondo
 BLACK = (0, 0, 0)        # Negro para algunos textos
