@@ -240,11 +240,11 @@ class TitleScreen:
         self.screen = screen
         self.clock = pygame.time.Clock()
         
-        # Fuentes modernas
-        self.font_title = pygame.font.Font(None, 180)
-        self.font_subtitle = pygame.font.Font(None, 48)
-        self.font_button = pygame.font.Font(None, 36)
-        self.font_small = pygame.font.Font(None, 28)
+        # Fuentes modernas con JetBrains Mono
+        self.font_title = cfg.get_font(cfg.FONTS['SIZES']['TITLE'], bold=True)
+        self.font_subtitle = cfg.get_font(cfg.FONTS['SIZES']['SUBTITLE'])
+        self.font_button = cfg.get_font(cfg.FONTS['SIZES']['BODY'], bold=True)
+        self.font_small = cfg.get_font(cfg.FONTS['SIZES']['SMALL'])
         
         # Configurar fondo binario más visible
         binary_config = BinaryBackgroundConfig(

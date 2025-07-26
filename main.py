@@ -58,12 +58,62 @@ current_background_index = 0
 SCALE_X = cfg.WIDTH / BASE_WIDTH
 SCALE_Y = cfg.HEIGHT / BASE_HEIGHT
 
-# Función auxiliar para escalar valores según la resolución
-def scale_value(value, is_horizontal=True):
+# Sistema de escalado inteligente y adaptativo
+def scale_value(value, is_horizontal=True, min_value=None, max_value=None):
+    """
+    Escala valores de forma inteligente según la resolución
+    
+    Args:
+        value: Valor base a escalar
+        is_horizontal: Si es dimensión horizontal (True) o vertical (False)
+        min_value: Valor mínimo permitido después del escalado
+        max_value: Valor máximo permitido después del escalado
+    """
     if is_horizontal:
-        return int(value * SCALE_X)
+        scaled = int(value * SCALE_X)
     else:
-        return int(value * SCALE_Y)
+        scaled = int(value * SCALE_Y)
+    
+    # Aplicar límites si se especifican
+    if min_value is not None:
+        scaled = max(scaled, min_value)
+    if max_value is not None:
+        scaled = min(scaled, max_value)
+    
+    return scaled
+
+def get_responsive_layout():
+    """
+    Determina el layout óptimo según la resolución actual
+    """
+    aspect_ratio = cfg.WIDTH / cfg.HEIGHT
+    
+    # Clasificar el tipo de pantalla
+    if aspect_ratio > 2.0:
+        layout_type = "ultrawide"
+    elif aspect_ratio > 1.6:
+        layout_type = "widescreen"
+    elif aspect_ratio > 1.2:
+        layout_type = "standard"
+    else:
+        layout_type = "portrait"
+    
+    # Determinar tamaño de pantalla
+    total_pixels = cfg.WIDTH * cfg.HEIGHT
+    if total_pixels > 6000000:  # > 6MP (ej: 4K)
+        size_category = "large"
+    elif total_pixels > 2000000:  # > 2MP (ej: 1080p)
+        size_category = "medium"
+    else:
+        size_category = "small"
+    
+    return {
+        "type": layout_type,
+        "size": size_category,
+        "aspect_ratio": aspect_ratio,
+        "is_high_res": total_pixels > 4000000,
+        "scale_factor": min(SCALE_X, SCALE_Y)  # Factor de escala conservador
+    }
 
 # Función para escalar una posición (x,y)
 def scale_pos(pos):
@@ -100,29 +150,253 @@ font_smallest = None
 fonts = {}
 
 # Función para cargar fuentes con tamaño responsivo
+def get_adaptive_config():
+    """
+    Obtiene configuración adaptativa según la resolución y layout
+    """
+    layout = get_responsive_layout()
+    
+    # Configuraciones base según el tipo de pantalla
+    configs = {
+        "ultrawide": {
+            "board_cell_size": 48,
+            "history_width_ratio": 0.20,
+            "current_number_size": 200,
+            "button_height": 60,
+            "spacing_multiplier": 1.2
+        },
+        "widescreen": {
+            "board_cell_size": 42,
+            "history_width_ratio": 0.24,
+            "current_number_size": 180,
+            "button_height": 56,
+            "spacing_multiplier": 1.0
+        },
+        "standard": {
+            "board_cell_size": 38,
+            "history_width_ratio": 0.26,
+            "current_number_size": 160,
+            "button_height": 52,
+            "spacing_multiplier": 0.9
+        },
+        "portrait": {
+            "board_cell_size": 32,
+            "history_width_ratio": 0.30,
+            "current_number_size": 140,
+            "button_height": 48,
+            "spacing_multiplier": 0.8
+        }
+    }
+    
+    base_config = configs[layout["type"]]
+    
+    # Ajustar según el tamaño de pantalla
+    size_multipliers = {
+        "large": 1.2,
+        "medium": 1.0,
+        "small": 0.8
+    }
+    
+    multiplier = size_multipliers[layout["size"]]
+    
+    # Aplicar multiplicador
+    adaptive_config = {}
+    for key, value in base_config.items():
+        if key.endswith("_ratio"):
+            adaptive_config[key] = value  # Los ratios no se escalan
+        else:
+            adaptive_config[key] = int(value * multiplier)
+    
+    return adaptive_config
+
 def load_responsive_fonts():
-    """Carga las fuentes con tamaños adaptados a la resolución actual"""
+    """Carga las fuentes con JetBrains Mono y tamaños adaptados a la resolución actual"""
     global font_big, font_medium, font_small, font_smallest, fonts
     
-    # Para un estilo retro Vegas, usamos fuentes sans-serif con tamaño escalado y negrita
-    font_big = pygame.font.SysFont(font_names, scale_value(80), bold=True)
-    font_medium = pygame.font.SysFont(font_names, scale_value(36), bold=True)
-    font_small = pygame.font.SysFont(font_names, scale_value(24))
-    font_smallest = pygame.font.SysFont(font_names, scale_value(14))
+    # Usar JetBrains Mono para una apariencia profesional y moderna
+    font_big = cfg.get_font(scale_value(cfg.FONTS['SIZES']['NUMBER_LARGE']), bold=True)
+    font_medium = cfg.get_font(scale_value(cfg.FONTS['SIZES']['HEADING']), bold=True)
+    font_small = cfg.get_font(scale_value(cfg.FONTS['SIZES']['BODY']))
+    font_smallest = cfg.get_font(scale_value(cfg.FONTS['SIZES']['SMALL']))
     
-    # Diccionario de fuentes adicionales
+    # Diccionario de fuentes adicionales con JetBrains Mono
     fonts = {
-        "title": pygame.font.SysFont(font_names, scale_value(32), bold=True),
-        "title_small": pygame.font.SysFont(font_names, scale_value(24), bold=True),
-        "button": pygame.font.SysFont(font_names, scale_value(26), bold=True),
-        "timer": pygame.font.SysFont(font_names, scale_value(32), bold=True),
-        "bingo": pygame.font.SysFont(font_names, scale_value(80), bold=True)
+        "title": cfg.get_font(scale_value(cfg.FONTS['SIZES']['TITLE']), bold=True),
+        "title_small": cfg.get_font(scale_value(cfg.FONTS['SIZES']['SUBTITLE']), bold=True),
+        "button": cfg.get_font(scale_value(cfg.FONTS['SIZES']['BODY']), bold=True),
+        "timer": cfg.get_font(scale_value(cfg.FONTS['SIZES']['HEADING']), bold=True),
+        "bingo": cfg.get_font(scale_value(cfg.FONTS['SIZES']['TITLE']), bold=True),
+        "number_large": cfg.get_font(scale_value(cfg.FONTS['SIZES']['NUMBER_LARGE']), bold=True),
+        "number_medium": cfg.get_font(scale_value(cfg.FONTS['SIZES']['NUMBER_MEDIUM']), bold=True),
+        "number_small": cfg.get_font(scale_value(cfg.FONTS['SIZES']['NUMBER_SMALL']))
     }
 
 # Cargar fuentes iniciales
 load_responsive_fonts()
 
 # Estado del juego
+class TooltipManager:
+    """Maneja tooltips informativos"""
+    
+    def __init__(self):
+        self.active_tooltip = None
+        self.tooltip_timer = 0
+        self.show_delay = 800  # ms antes de mostrar tooltip
+        self.fade_duration = 200  # ms para fade in/out
+        
+    def set_tooltip(self, text, position, delay=None):
+        """Establece un tooltip para mostrar"""
+        if delay is None:
+            delay = self.show_delay
+            
+        self.active_tooltip = {
+            'text': text,
+            'position': position,
+            'start_time': pygame.time.get_ticks(),
+            'delay': delay,
+            'visible': False,
+            'alpha': 0
+        }
+    
+    def clear_tooltip(self):
+        """Limpia el tooltip actual"""
+        if self.active_tooltip:
+            self.active_tooltip['visible'] = False
+    
+    def update(self):
+        """Actualiza el estado del tooltip"""
+        if not self.active_tooltip:
+            return
+            
+        current_time = pygame.time.get_ticks()
+        elapsed = current_time - self.active_tooltip['start_time']
+        
+        if elapsed >= self.active_tooltip['delay'] and not self.active_tooltip['visible']:
+            self.active_tooltip['visible'] = True
+            
+        if self.active_tooltip['visible']:
+            # Fade in
+            fade_progress = min(1.0, (elapsed - self.active_tooltip['delay']) / self.fade_duration)
+            self.active_tooltip['alpha'] = int(255 * fade_progress)
+    
+    def draw(self, screen):
+        """Dibuja el tooltip si está activo"""
+        if not self.active_tooltip or not self.active_tooltip['visible'] or self.active_tooltip['alpha'] <= 0:
+            return
+            
+        tooltip = self.active_tooltip
+        text = tooltip['text']
+        pos = tooltip['position']
+        alpha = tooltip['alpha']
+        
+        # Configuración del tooltip
+        padding = scale_value(12)
+        corner_radius = scale_value(6)
+        font = fonts["number_small"]
+        
+        # Renderizar texto
+        text_surface = font.render(text, True, cfg.TEXT_COLOR)
+        text_rect = text_surface.get_rect()
+        
+        # Calcular dimensiones del tooltip
+        tooltip_width = text_rect.width + padding * 2
+        tooltip_height = text_rect.height + padding * 2
+        
+        # Posicionar tooltip (evitar bordes de pantalla)
+        tooltip_x = pos[0] - tooltip_width // 2
+        tooltip_y = pos[1] - tooltip_height - scale_value(10)
+        
+        # Ajustar si se sale de la pantalla
+        if tooltip_x < scale_value(10):
+            tooltip_x = scale_value(10)
+        elif tooltip_x + tooltip_width > cfg.WIDTH - scale_value(10):
+            tooltip_x = cfg.WIDTH - tooltip_width - scale_value(10)
+            
+        if tooltip_y < scale_value(10):
+            tooltip_y = pos[1] + scale_value(10)
+        
+        tooltip_rect = pygame.Rect(tooltip_x, tooltip_y, tooltip_width, tooltip_height)
+        
+        # Crear superficie con alpha
+        tooltip_surface = pygame.Surface((tooltip_width, tooltip_height), pygame.SRCALPHA)
+        
+        # Fondo del tooltip
+        bg_color = (*cfg.DARK_GRAY[:3], min(220, alpha))
+        draw_rounded_rect(tooltip_surface, bg_color, 
+                         pygame.Rect(0, 0, tooltip_width, tooltip_height), corner_radius)
+        
+        # Borde del tooltip
+        border_color = (*cfg.BORDER_COLOR[:3], alpha)
+        draw_rounded_rect_outline(tooltip_surface, border_color,
+                                pygame.Rect(0, 0, tooltip_width, tooltip_height), corner_radius, 1)
+        
+        # Texto del tooltip
+        text_surface.set_alpha(alpha)
+        text_pos = (padding, padding)
+        tooltip_surface.blit(text_surface, text_pos)
+        
+        # Dibujar tooltip en pantalla
+        screen.blit(tooltip_surface, tooltip_rect)
+
+class TransitionManager:
+    """Maneja transiciones suaves entre estados"""
+    
+    def __init__(self):
+        self.transitions = {}
+        self.easing_functions = {
+            'linear': lambda t: t,
+            'ease_in': lambda t: t * t,
+            'ease_out': lambda t: 1 - (1 - t) * (1 - t),
+            'ease_in_out': lambda t: 2 * t * t if t < 0.5 else 1 - 2 * (1 - t) * (1 - t),
+            'bounce': lambda t: 1 - abs(math.sin(t * math.pi * 2)) * (1 - t)
+        }
+    
+    def start_transition(self, name, start_value, end_value, duration, easing='ease_out'):
+        """Inicia una nueva transición"""
+        self.transitions[name] = {
+            'start_value': start_value,
+            'end_value': end_value,
+            'duration': duration,
+            'start_time': pygame.time.get_ticks(),
+            'easing': easing,
+            'active': True
+        }
+    
+    def get_value(self, name, default=0):
+        """Obtiene el valor actual de una transición"""
+        if name not in self.transitions:
+            return default
+        
+        transition = self.transitions[name]
+        if not transition['active']:
+            return transition['end_value']
+        
+        current_time = pygame.time.get_ticks()
+        elapsed = current_time - transition['start_time']
+        progress = min(1.0, elapsed / transition['duration'])
+        
+        if progress >= 1.0:
+            transition['active'] = False
+            return transition['end_value']
+        
+        # Aplicar función de easing
+        eased_progress = self.easing_functions[transition['easing']](progress)
+        
+        # Interpolar entre valores
+        start = transition['start_value']
+        end = transition['end_value']
+        
+        if isinstance(start, (int, float)):
+            return start + (end - start) * eased_progress
+        elif isinstance(start, tuple):  # Para colores RGB
+            return tuple(int(start[i] + (end[i] - start[i]) * eased_progress) for i in range(len(start)))
+        
+        return end
+    
+    def is_active(self, name):
+        """Verifica si una transición está activa"""
+        return name in self.transitions and self.transitions[name]['active']
+
 class GameState:
     def __init__(self):
         self.running = True
@@ -154,6 +428,10 @@ class GameState:
         
         # Inicialización del tablero
         self.initialize_board()
+        
+        # Sistema de transiciones y tooltips
+        self.transitions = TransitionManager()
+        self.tooltips = TooltipManager()
     
     def initialize_board(self):
         # Inicializar el tablero con los números según el modo de juego
@@ -295,111 +573,194 @@ class Ball:
             print(f"Error reproduciendo audio para el número {self.number}: {e}")
 
 def draw_board():
-    """Dibuja el tablero principal del bingo con estilo Vegas."""
-    # POSICIÓN COORDINADA: Centro de la pantalla, posición optimizada
-    cell_size = scale_value(45)  # Tamaño óptimo para visibilidad
-    board_width = cfg.BOARD_COLS * cell_size
-    board_height = cfg.BOARD_ROWS * cell_size
+    """Dibuja el tablero principal del bingo con diseño moderno y profesional."""
+    # Obtener configuración adaptativa
+    adaptive_config = get_adaptive_config()
     
-    # Centrar horizontalmente, posicionar mucho más arriba para alinearse con el historial
+    # Configuración responsiva del tablero
+    cell_size = scale_value(adaptive_config["board_cell_size"], min_value=24, max_value=60)
+    cell_spacing = scale_value(int(adaptive_config["board_cell_size"] * 0.07), min_value=2, max_value=8)
+    corner_radius = scale_value(6, min_value=3, max_value=12)
+    
+    # Calcular dimensiones del tablero
+    board_width = cfg.BOARD_COLS * cell_size + (cfg.BOARD_COLS - 1) * cell_spacing
+    board_height = cfg.BOARD_ROWS * cell_size + (cfg.BOARD_ROWS - 1) * cell_spacing
+    
+    # Posicionamiento centrado y optimizado
     board_x = (cfg.WIDTH - board_width) // 2
-    board_y = scale_value(120, False)  # Posición mucho más alta (260 -> 120) para alinear con historial
+    board_y = scale_value(140, False)  # Posición equilibrada
     
-    # TÍTULO DEL TABLERO: Posicionado claramente ARRIBA del tablero
-    # Dibujar el título con mayor separación respecto al tablero
-    title_y = board_y - scale_value(90, False)  # Mayor separación entre título y tablero
+    # Contenedor del tablero con diseño moderno
+    container_padding = scale_value(20)
+    container_rect = pygame.Rect(
+        board_x - container_padding,
+        board_y - container_padding,
+        board_width + container_padding * 2,
+        board_height + container_padding * 2
+    )
     
-    # Sombra para el título
-    shadow_offset = 3
-    board_title_shadow = font_big.render("TABLERO", True, cfg.BLACK)
-    title_shadow_rect = board_title_shadow.get_rect(midtop=(board_x + board_width // 2 + shadow_offset, title_y + shadow_offset))
-    screen.blit(board_title_shadow, title_shadow_rect)
+    # Sombra del contenedor
+    shadow_rect = container_rect.copy()
+    shadow_rect.x += scale_value(6)
+    shadow_rect.y += scale_value(6)
+    draw_rounded_rect(screen, (0, 0, 0, 32), shadow_rect, scale_value(12))
     
-    # Título principal
-    board_title = font_big.render("TABLERO", True, cfg.HIGHLIGHT_COLOR)
-    title_rect = board_title.get_rect(midtop=(board_x + board_width // 2, title_y))
-    screen.blit(board_title, title_rect)
+    # Fondo del contenedor
+    draw_rounded_rect(screen, cfg.FRAME_COLOR, container_rect, scale_value(12))
     
-    # Fondo del tablero con borde neón brillante
-    for i in range(5, 0, -1):
-        glow_rect = pygame.Rect(board_x-i-2, board_y-i-2, board_width+i*2+4, board_height+i*2+4)
-        alpha = int(50 - i * 8)
-        s = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-        s.fill((*cfg.PRIMARY_COLOR, alpha))
-        screen.blit(s, (glow_rect.x, glow_rect.y))
+    # Borde del contenedor
+    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, container_rect, scale_value(12), scale_value(2))
     
-    # Borde del tablero
-    pygame.draw.rect(screen, cfg.HIGHLIGHT_COLOR, (board_x-4, board_y-4, board_width+8, board_height+8), 2)
+    # Título del tablero moderno
+    title_y = container_rect.top - scale_value(50, False)
+    title_font = fonts["title_small"]
+    title_text = title_font.render("TABLERO DE NÚMEROS", True, cfg.TEXT_COLOR)
+    title_rect = title_text.get_rect(center=(container_rect.centerx, title_y))
+    screen.blit(title_text, title_rect)
     
-    # Dibujar celdas del tablero como flipcards
+    # Subtítulo con información del modo
+    mode_text = f"Modo: {cfg.BOARD_ROWS}×{cfg.BOARD_COLS} | Números 1-{cfg.TOTAL_NUMBERS}"
+    subtitle_font = fonts["number_small"]
+    subtitle_surface = subtitle_font.render(mode_text, True, cfg.GRAY)
+    subtitle_rect = subtitle_surface.get_rect(center=(container_rect.centerx, title_y + scale_value(25, False)))
+    screen.blit(subtitle_surface, subtitle_rect)
+    
+    # Dibujar celdas del tablero con diseño moderno
     for row in range(cfg.BOARD_ROWS):
         for col in range(cfg.BOARD_COLS):
-            cell_x = board_x + col * cell_size
-            cell_y = board_y + row * cell_size
-            card_size = cell_size - 2  # Espacio entre cartas
-            
             number = row * cfg.BOARD_COLS + col + 1
-            if number <= cfg.TOTAL_NUMBERS:  # Usar el total de números configurado
-                # Determinar el color basado en el rango del número
-                range_color, _ = get_number_color_and_glow(number)
+            
+            if number <= cfg.TOTAL_NUMBERS:
+                # Calcular posición de la celda
+                cell_x = board_x + col * (cell_size + cell_spacing)
+                cell_y = board_y + row * (cell_size + cell_spacing)
+                cell_rect = pygame.Rect(cell_x, cell_y, cell_size, cell_size)
                 
-                # Crear superficie de la carta
-                card_surface = pygame.Surface((card_size, card_size))
+                # Determinar colores según el rango
+                range_color, glow_color = get_number_color_and_glow(number)
                 
-                # Estado de la carta basado en si el número ha sido extraído
-                if number in game_state.drawn_numbers:
-                    # Carta revelada - mostrar número
-                    card_surface.fill(range_color)
-                    
-                    # Borde de la carta revelada
-                    pygame.draw.rect(card_surface, cfg.WHITE, (0, 0, card_size, card_size), 2)
-                    
-                    # Efecto especial si es el número actual
-                    if number == game_state.current_number:
-                        # Efecto de brillo pulsante
-                        pulse_alpha = int(128 + 127 * math.sin(pygame.time.get_ticks() * 0.01))
-                        glow_surface = pygame.Surface((card_size + 6, card_size + 6), pygame.SRCALPHA)
-                        glow_surface.fill((*cfg.HIGHLIGHT_COLOR, pulse_alpha))
-                        screen.blit(glow_surface, (cell_x - 3, cell_y - 3))
-                    
-                    # Número en la carta
-                    text_color = cfg.WHITE
-                    num_text = font_small.render(str(number), True, text_color)
-                    text_rect = num_text.get_rect(center=(card_size // 2, card_size // 2))
-                    card_surface.blit(num_text, text_rect)
-                    
+                # Estado de la celda
+                is_drawn = number in game_state.drawn_numbers
+                is_current = number == game_state.current_number
+                
+                if is_drawn:
+                    # Número ya sorteado - celda activa
+                    if is_current:
+                        # Número actual - efecto especial
+                        current_time = pygame.time.get_ticks()
+                        pulse = 0.8 + 0.2 * math.sin(current_time / 300)
+                        
+                        # Brillo pulsante alrededor
+                        glow_rect = cell_rect.inflate(scale_value(8), scale_value(8))
+                        glow_alpha = int(120 * pulse)
+                        draw_rounded_rect(screen, (*glow_color[:3], glow_alpha), glow_rect, corner_radius + scale_value(2))
+                        
+                        # Fondo con color intenso
+                        draw_rounded_rect(screen, range_color, cell_rect, corner_radius)
+                        
+                        # Borde brillante
+                        draw_rounded_rect_outline(screen, cfg.HIGHLIGHT_COLOR, cell_rect, corner_radius, scale_value(3))
+                        
+                        # Texto con color contrastante
+                        text_color = cfg.BLACK if range_color == cfg.ACCENT_COLOR else cfg.TEXT_COLOR
+                    else:
+                        # Número sorteado normal
+                        # Fondo con color del rango
+                        draw_rounded_rect(screen, range_color, cell_rect, corner_radius)
+                        
+                        # Borde sutil
+                        draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, cell_rect, corner_radius, scale_value(1))
+                        
+                        # Texto con color contrastante
+                        text_color = cfg.BLACK if range_color == cfg.ACCENT_COLOR else cfg.TEXT_COLOR
                 else:
-                    # Carta no revelada - mostrar dorso
-                    card_surface.fill(cfg.PRIMARY_COLOR)
+                    # Número no sorteado - celda inactiva
+                    # Fondo neutro
+                    draw_rounded_rect(screen, cfg.DARK_GRAY, cell_rect, corner_radius)
                     
-                    # Patrón en el dorso de la carta
-                    pygame.draw.rect(card_surface, cfg.SECONDARY_COLOR, (0, 0, card_size, card_size), 2)
+                    # Borde sutil
+                    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, cell_rect, corner_radius, scale_value(1))
                     
-                    # Dibujar patrón de diamante en el centro
-                    center_x, center_y = card_size // 2, card_size // 2
-                    diamond_size = card_size // 4
-                    diamond_points = [
-                        (center_x, center_y - diamond_size),
-                        (center_x + diamond_size, center_y),
-                        (center_x, center_y + diamond_size),
-                        (center_x - diamond_size, center_y)
-                    ]
-                    pygame.draw.polygon(card_surface, cfg.HIGHLIGHT_COLOR, diamond_points)
+                    # Texto apagado
+                    text_color = cfg.GRAY
                 
-                # Dibujar la carta en la pantalla
-                screen.blit(card_surface, (cell_x, cell_y))
+                # Renderizar número
+                number_font = fonts["number_medium"]
+                number_surface = number_font.render(str(number), True, text_color)
+                number_rect = number_surface.get_rect(center=cell_rect.center)
+                screen.blit(number_surface, number_rect)
+                
+                # Tooltip para celdas (solo si el mouse está sobre una celda)
+                mouse_pos = pygame.mouse.get_pos()
+                if cell_rect.collidepoint(mouse_pos):
+                    if is_drawn:
+                        if is_current:
+                            tooltip_text = f"Número {number} - ¡ACTUAL!"
+                        else:
+                            tooltip_text = f"Número {number} - Ya sorteado"
+                    else:
+                        tooltip_text = f"Número {number} - Pendiente"
+                    
+                    game_state.tooltips.set_tooltip(tooltip_text, (cell_rect.centerx, cell_rect.top), delay=500)
+    
+    # Estadísticas del tablero
+    drawn_count = len(game_state.drawn_numbers)
+    remaining_count = cfg.TOTAL_NUMBERS - drawn_count
+    progress_percentage = (drawn_count / cfg.TOTAL_NUMBERS) * 100
+    
+    # Barra de progreso moderna
+    progress_bar_y = container_rect.bottom + scale_value(15, False)
+    progress_bar_width = board_width
+    progress_bar_height = scale_value(8, False)
+    progress_bar_rect = pygame.Rect(board_x, progress_bar_y, progress_bar_width, progress_bar_height)
+    
+    # Fondo de la barra de progreso
+    draw_rounded_rect(screen, cfg.DARK_GRAY, progress_bar_rect, scale_value(4))
+    
+    # Progreso actual
+    if drawn_count > 0:
+        progress_width = int(progress_bar_width * (drawn_count / cfg.TOTAL_NUMBERS))
+        progress_rect = pygame.Rect(board_x, progress_bar_y, progress_width, progress_bar_height)
+        draw_rounded_rect(screen, cfg.PRIMARY_COLOR, progress_rect, scale_value(4))
+    
+    # Texto de estadísticas
+    stats_y = progress_bar_y + scale_value(25, False)
+    stats_font = fonts["number_small"]
+    
+    # Números sorteados
+    drawn_text = f"Sorteados: {drawn_count}"
+    drawn_surface = stats_font.render(drawn_text, True, cfg.TEXT_COLOR)
+    drawn_rect = drawn_surface.get_rect(left=board_x, centery=stats_y)
+    screen.blit(drawn_surface, drawn_rect)
+    
+    # Porcentaje
+    percentage_text = f"{progress_percentage:.1f}%"
+    percentage_surface = stats_font.render(percentage_text, True, cfg.ACCENT_COLOR)
+    percentage_rect = percentage_surface.get_rect(center=(container_rect.centerx, stats_y))
+    screen.blit(percentage_surface, percentage_rect)
+    
+    # Números restantes
+    remaining_text = f"Restantes: {remaining_count}"
+    remaining_surface = stats_font.render(remaining_text, True, cfg.GRAY)
+    remaining_rect = remaining_surface.get_rect(right=board_x + board_width, centery=stats_y)
+    screen.blit(remaining_surface, remaining_rect)
 
 def draw_buttons():
-    """Dibuja los botones del juego con estilo Vegas."""
-    # Definición de botones - más grandes y llamativos para estilo Vegas, escalados para responsividad
-    btn_height = scale_value(60, False)
+    """Dibuja los botones del juego con diseño moderno y profesional."""
+    # Obtener configuración adaptativa
+    adaptive_config = get_adaptive_config()
     
-    # Botones escalados y posicionados proporcionalmente a la pantalla
-    start_btn_width = scale_value(340)
-    side_btn_width = scale_value(140)
-    bottom_margin = scale_value(110, False)
+    # Configuración de botones con diseño más limpio
+    btn_height = scale_value(adaptive_config["button_height"], False, min_value=40, max_value=80)
+    corner_radius = scale_value(8, min_value=4, max_value=12)
     
-    # Crear rectángulos para los botones
+    # Dimensiones y posiciones optimizadas
+    start_btn_width = scale_value(280)
+    side_btn_width = scale_value(120)
+    bottom_margin = scale_value(80, False)
+    button_spacing = scale_value(16)
+    
+    # Crear rectángulos para los botones con mejor espaciado
     start_button_rect = pygame.Rect(
         cfg.WIDTH // 2 - start_btn_width // 2,
         cfg.HEIGHT - bottom_margin, 
@@ -407,13 +768,13 @@ def draw_buttons():
         btn_height
     )
     bingo_button_rect = pygame.Rect(
-        cfg.WIDTH - side_btn_width - scale_value(30), 
+        cfg.WIDTH - side_btn_width - scale_value(24), 
         cfg.HEIGHT - bottom_margin, 
         side_btn_width, 
         btn_height
     )
     reset_button_rect = pygame.Rect(
-        scale_value(30), 
+        scale_value(24), 
         cfg.HEIGHT - bottom_margin, 
         side_btn_width, 
         btn_height
@@ -426,213 +787,189 @@ def draw_buttons():
         "reset": reset_button_rect
     }
     
-    # Comprobar si el ratón está sobre algún botón para efecto hover
+    # Detectar hover states con transiciones y tooltips
     mouse_pos = pygame.mouse.get_pos()
     start_hover = start_button_rect.collidepoint(mouse_pos)
     bingo_hover = bingo_button_rect.collidepoint(mouse_pos)
     reset_hover = reset_button_rect.collidepoint(mouse_pos)
     
-    # Tiempo para el efecto pulsante estilo neón
-    current_time = pygame.time.get_ticks()
-    pulse = 0.7 + 0.3 * math.sin(current_time / 500)
+    # Gestionar tooltips
+    if start_hover:
+        tooltip_text = "Sortear siguiente número" if game_state.game_started else "Comenzar el juego"
+        game_state.tooltips.set_tooltip(tooltip_text, (start_button_rect.centerx, start_button_rect.top))
+    elif bingo_hover and game_state.game_started:
+        game_state.tooltips.set_tooltip("¡Cantar BINGO!", (bingo_button_rect.centerx, bingo_button_rect.top))
+    elif reset_hover:
+        game_state.tooltips.set_tooltip("Reiniciar juego", (reset_button_rect.centerx, reset_button_rect.top))
+    else:
+        game_state.tooltips.clear_tooltip()
     
-    # Colores de los botones según estado hover - nueva paleta
-    start_color = cfg.BUTTON_HOVER_COLOR if start_hover else cfg.BUTTON_COLOR     # Naranja rojizo/Rojo
-    bingo_color = cfg.BUTTON_HOVER_COLOR if bingo_hover else cfg.BUTTON_COLOR     # Naranja rojizo/Rojo
-    reset_color = cfg.BUTTON_HOVER_COLOR if reset_hover else cfg.BUTTON_COLOR     # Naranja rojizo/Rojo
+    # Gestionar transiciones de hover
+    if start_hover and not game_state.transitions.is_active('start_hover'):
+        game_state.transitions.start_transition('start_hover', 0.0, 1.0, 200, 'ease_out')
+    elif not start_hover and not game_state.transitions.is_active('start_hover'):
+        game_state.transitions.start_transition('start_hover', 1.0, 0.0, 200, 'ease_out')
     
-    # ==== BOTÓN INICIAR/SIGUIENTE ====
-    # Efecto de resplandor exterior
-    glow_color = cfg.GLOW_COLOR  # Dorado
-    for i in range(4, 0, -1):
-        glow_size = int(i * pulse * 1.5)  # Tamaño del resplandor varía con el pulso
-        glow_rect = start_button_rect.inflate(glow_size, glow_size)
-        pygame.draw.rect(screen, glow_color, glow_rect, border_radius=scale_value(12))
-
-    # Rectángulo principal del botón
-    pygame.draw.rect(screen, start_color, start_button_rect, border_radius=scale_value(10))
-    pygame.draw.rect(screen, cfg.BORDER_COLOR, start_button_rect, scale_value(2), border_radius=scale_value(10))  # Naranja
-
-    # Texto INICIAR/SIGUIENTE con sombra para efecto 3D
+    if bingo_hover and not game_state.transitions.is_active('bingo_hover'):
+        game_state.transitions.start_transition('bingo_hover', 0.0, 1.0, 200, 'ease_out')
+    elif not bingo_hover and not game_state.transitions.is_active('bingo_hover'):
+        game_state.transitions.start_transition('bingo_hover', 1.0, 0.0, 200, 'ease_out')
+    
+    if reset_hover and not game_state.transitions.is_active('reset_hover'):
+        game_state.transitions.start_transition('reset_hover', 0.0, 1.0, 200, 'ease_out')
+    elif not reset_hover and not game_state.transitions.is_active('reset_hover'):
+        game_state.transitions.start_transition('reset_hover', 1.0, 0.0, 200, 'ease_out')
+    
+    # ==== BOTÓN PRINCIPAL (INICIAR/SIGUIENTE) ====
     button_text = "INICIAR" if not game_state.game_started else "SIGUIENTE"
-    start_text = fonts["button"].render(button_text, True, cfg.TEXT_COLOR)  # Blanco
-    text_shadow = fonts["button"].render(button_text, True, cfg.BLACK)
     
-    # Posición del texto
-    text_rect = start_text.get_rect(center=start_button_rect.center)
-    shadow_rect = text_shadow.get_rect(center=(text_rect.centerx + scale_value(2), text_rect.centery + scale_value(2)))
+    # Colores según estado con transiciones suaves
+    hover_intensity = game_state.transitions.get_value('start_hover', 0.0)
     
-    # Dibujar sombra primero, luego el texto
-    screen.blit(text_shadow, shadow_rect)
-    screen.blit(start_text, text_rect)
+    # Interpolar colores
+    normal_color = cfg.BUTTON_COLOR
+    hover_color = cfg.BUTTON_HOVER_COLOR
+    bg_color = tuple(int(normal_color[i] + (hover_color[i] - normal_color[i]) * hover_intensity) for i in range(3))
+    
+    shadow_color = (0, 0, 0, 64)
+    shadow_offset = scale_value(4 - 2 * hover_intensity)
+    
+    # Sombra del botón
+    shadow_rect = start_button_rect.copy()
+    shadow_rect.x += shadow_offset
+    shadow_rect.y += shadow_offset
+    draw_rounded_rect(screen, shadow_color, shadow_rect, corner_radius)
+    
+    # Botón principal
+    draw_rounded_rect(screen, bg_color, start_button_rect, corner_radius)
+    
+    # Borde sutil
+    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, start_button_rect, corner_radius, scale_value(1))
+    
+    # Texto del botón
+    text_surface = fonts["button"].render(button_text, True, cfg.TEXT_COLOR)
+    text_rect = text_surface.get_rect(center=start_button_rect.center)
+    screen.blit(text_surface, text_rect)
     
     # ==== BOTÓN BINGO ====
-    # Efecto de resplandor si el juego está en curso
+    # Color según estado del juego
     if game_state.game_started and not game_state.game_over:
-        glow_color = cfg.ALT_GLOW_COLOR  # Amarillo
-        for i in range(3, 0, -1):
-            glow_size = int(i * pulse * 1.5)
-            glow_rect = bingo_button_rect.inflate(glow_size, glow_size)
-            pygame.draw.rect(screen, glow_color, glow_rect, border_radius=scale_value(12))
+        if bingo_hover:
+            bg_color = cfg.SECONDARY_COLOR
+        else:
+            bg_color = cfg.ACCENT_COLOR
+        text_color = cfg.TEXT_COLOR
+    else:
+        bg_color = cfg.FRAME_COLOR
+        text_color = cfg.GRAY
     
-    # Rectángulo principal del botón
-    pygame.draw.rect(screen, bingo_color, bingo_button_rect, border_radius=scale_value(10))
-    pygame.draw.rect(screen, cfg.BORDER_COLOR, bingo_button_rect, scale_value(2), border_radius=scale_value(10))  # Naranja
+    # Sombra del botón
+    shadow_rect = bingo_button_rect.copy()
+    shadow_rect.x += scale_value(2) if bingo_hover else scale_value(4)
+    shadow_rect.y += scale_value(2) if bingo_hover else scale_value(4)
+    draw_rounded_rect(screen, shadow_color, shadow_rect, corner_radius)
     
-    # Texto BINGO con sombra
-    bingo_text = fonts["button"].render("BINGO", True, cfg.TEXT_COLOR)  # Blanco
-    bingo_shadow = fonts["button"].render("BINGO", True, cfg.BLACK)
+    # Botón BINGO
+    draw_rounded_rect(screen, bg_color, bingo_button_rect, corner_radius)
+    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, bingo_button_rect, corner_radius, scale_value(1))
     
-    text_rect = bingo_text.get_rect(center=bingo_button_rect.center)
-    shadow_rect = bingo_shadow.get_rect(center=(text_rect.centerx + scale_value(2), text_rect.centery + scale_value(2)))
-    
-    screen.blit(bingo_shadow, shadow_rect)
-    screen.blit(bingo_text, text_rect)
+    # Texto BINGO
+    bingo_text_surface = fonts["button"].render("BINGO", True, text_color)
+    bingo_text_rect = bingo_text_surface.get_rect(center=bingo_button_rect.center)
+    screen.blit(bingo_text_surface, bingo_text_rect)
     
     # ==== BOTÓN REINICIAR ====
-    # Efecto de resplandor para el botón reiniciar
-    glow_color = cfg.FRAME_COLOR  # Plateado
-    for i in range(3, 0, -1):
-        glow_size = int(i * pulse * 1.5)
-        glow_rect = reset_button_rect.inflate(glow_size, glow_size)
-        pygame.draw.rect(screen, glow_color, glow_rect, border_radius=scale_value(12))
-        
+    if reset_hover:
+        bg_color = (255, 108, 96)  # Rojo hover
+    else:
+        bg_color = (248, 81, 73)   # Rojo normal
+    
+    # Sombra del botón
+    shadow_rect = reset_button_rect.copy()
+    shadow_rect.x += scale_value(2) if reset_hover else scale_value(4)
+    shadow_rect.y += scale_value(2) if reset_hover else scale_value(4)
+    draw_rounded_rect(screen, shadow_color, shadow_rect, corner_radius)
+    
     # Botón REINICIAR
-    pygame.draw.rect(screen, reset_color, reset_button_rect, border_radius=scale_value(10))
-    pygame.draw.rect(screen, cfg.BORDER_COLOR, reset_button_rect, scale_value(2), border_radius=scale_value(10))  # Naranja
+    draw_rounded_rect(screen, bg_color, reset_button_rect, corner_radius)
+    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, reset_button_rect, corner_radius, scale_value(1))
     
-    # Texto REINICIAR con sombra
-    reset_text = fonts["button"].render("REINICIAR", True, cfg.TEXT_COLOR)  # Blanco
-    reset_shadow = fonts["button"].render("REINICIAR", True, cfg.BLACK)
-    
-    text_rect = reset_text.get_rect(center=reset_button_rect.center)
-    shadow_rect = reset_shadow.get_rect(center=(text_rect.centerx + scale_value(2), text_rect.centery + scale_value(2)))
-    
-    screen.blit(reset_shadow, shadow_rect)
-    screen.blit(reset_text, text_rect)
+    # Texto REINICIAR
+    reset_text_surface = fonts["button"].render("RESET", True, cfg.TEXT_COLOR)
+    reset_text_rect = reset_text_surface.get_rect(center=reset_button_rect.center)
+    screen.blit(reset_text_surface, reset_text_rect)
 
 def draw_current_number():
+    """Dibuja el número actual con diseño moderno y profesional"""
     if game_state.current_number is not None:
-        # POSICIÓN COORDINADA: Esquina superior izquierda
-        frame_width = scale_value(200)   # Tamaño óptimo
-        frame_height = scale_value(200, False)
-        frame_x = scale_value(40)        # Margen izquierdo generoso
-        frame_y = scale_value(40, False) # Margen superior generoso
+        # Obtener configuración adaptativa
+        adaptive_config = get_adaptive_config()
         
-        # Efecto pulsante para el marco
+        # Configuración del contenedor moderno
+        base_size = adaptive_config["current_number_size"]
+        container_width = scale_value(base_size * 1.2, min_value=180, max_value=300)
+        container_height = scale_value(base_size, min_value=120, max_value=200)
+        container_x = scale_value(24, min_value=16, max_value=48)
+        container_y = scale_value(24, False, min_value=16, max_value=48)
+        corner_radius = scale_value(12, min_value=6, max_value=16)
+        
+        # Determinar colores según el rango del número
+        number_color, glow_color = get_number_color_and_glow(game_state.current_number)
+        
+        # Animación de escala suave con transiciones
+        scale = game_state.transitions.get_value('number_scale', 1.0)
+        glow_intensity_transition = game_state.transitions.get_value('number_glow', 0.3)
+        
+        # Aplicar escala
+        scaled_width = int(container_width * scale)
+        scaled_height = int(container_height * scale)
+        scaled_x = container_x + (container_width - scaled_width) // 2
+        scaled_y = container_y + (container_height - scaled_height) // 2
+        
+        container_rect = pygame.Rect(scaled_x, scaled_y, scaled_width, scaled_height)
+        
+        # Sombra del contenedor
+        shadow_rect = container_rect.copy()
+        shadow_rect.x += scale_value(4)
+        shadow_rect.y += scale_value(4)
+        draw_rounded_rect(screen, (0, 0, 0, 64), shadow_rect, corner_radius)
+        
+        # Fondo del contenedor
+        draw_rounded_rect(screen, cfg.FRAME_COLOR, container_rect, corner_radius)
+        
+        # Borde con color del rango
+        draw_rounded_rect_outline(screen, number_color, container_rect, corner_radius, scale_value(2))
+        
+        # Efecto de brillo sutil en el borde con transición
         current_time = pygame.time.get_ticks()
-        pulse = 0.5 + 0.5 * math.sin(current_time / 500)  # Pulsación suave para efecto neón
-    
-        # Determinar el color basado en el rango del número actual - con nueva paleta
-        if cfg.TOTAL_NUMBERS == 90:
-            # Modo normal
-            if game_state.current_number <= 30:
-                number_color = cfg.BUTTON_COLOR
-                glow_color = (180, 0, 0)
-            elif game_state.current_number <= 60:
-                number_color = cfg.GLOW_COLOR
-                glow_color = (255, 215, 0)
-            else:
-                number_color = cfg.BORDER_COLOR
-                glow_color = (255, 165, 0)
-        else:
-            # Modo alterno
-            if game_state.current_number <= 25:
-                number_color = cfg.BUTTON_COLOR
-                glow_color = (180, 0, 0)
-            elif game_state.current_number <= 50:
-                number_color = cfg.GLOW_COLOR
-                glow_color = (255, 215, 0)
-            else:
-                number_color = cfg.BORDER_COLOR
-                glow_color = (255, 165, 0)
-            
-        # Aplicar efecto de escala con animación más llamativa para estilo Vegas
-        scale = 1.0
-        if game_state.number_animation_active:
-            elapsed = pygame.time.get_ticks() - game_state.number_animation_start
-            progress = min(1.0, elapsed / game_state.number_animation_duration)
-            
-            # Efecto de aparición con rebote para estilo Vegas
-            if progress < 0.5:
-                scale = 0.5 + 1.2 * progress  # Crece rápido y se pasa
-            else:
-                scale = 1.1 - 0.1 * (progress - 0.5) * 2  # Se estabiliza
-                
-            # Desactivar la animación cuando termine
-            if progress >= 1.0:
-                game_state.number_animation_active = False
+        base_glow = 0.3 + 0.2 * math.sin(current_time / 1000)
+        glow_intensity = base_glow * glow_intensity_transition
+        glow_rect = container_rect.inflate(scale_value(4), scale_value(4))
+        glow_surface = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+        glow_alpha = int(60 * glow_intensity)
+        glow_surface_rect = pygame.Rect(0, 0, glow_rect.width, glow_rect.height)
+        draw_rounded_rect(glow_surface, (*number_color[:3], glow_alpha), 
+                         glow_surface_rect, corner_radius + scale_value(2))
+        screen.blit(glow_surface, glow_rect)
         
-        # Usar las coordenadas definidas al inicio de la función
-        rect_width = frame_width * scale  
-        rect_height = frame_height * scale
+        # Número principal
+        number_font = fonts["number_large"]
+        number_text = number_font.render(str(game_state.current_number), True, number_color)
+        number_rect = number_text.get_rect(center=(container_rect.centerx, container_rect.centery - scale_value(8)))
+        screen.blit(number_text, number_rect)
         
-        # Centrar en el área definida
-        rect_center = (frame_x + rect_width // 2, frame_y + rect_height // 2)
-        rect_pos = (frame_x, frame_y)
-        
-        # Efecto de brillo neón alrededor del número actual
-        current_time = pygame.time.get_ticks()
-        pulse = 0.7 + 0.3 * math.sin(current_time / 500)  # Pulsación para efecto neón
-        
-        # Crear efecto de resplandor neón alrededor del rectángulo principal
-        for i in range(6, 0, -1):
-            glow_size = i * pulse
-            glow_rect = pygame.Rect(
-                rect_pos[0] - glow_size,
-                rect_pos[1] - glow_size,
-                rect_width + glow_size * 2,
-                rect_height + glow_size * 2
-            )
-            alpha = int(40 - i * 6)  # Disminuir alpha gradualmente
-            s = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-            s.fill((*glow_color, alpha))  # Color según rango con transparencia
-            screen.blit(s, (glow_rect.x, glow_rect.y))
-        
-        # Estilo Vegas: rectángulo con bordes redondeados
-        pygame.draw.rect(screen, cfg.WHITE, 
-                       (rect_pos[0], rect_pos[1], rect_width, rect_height), 
-                       border_radius=10)
-        
-        # Borde neón
-        pygame.draw.rect(screen, number_color, 
-                       (rect_pos[0], rect_pos[1], rect_width, rect_height), 3, 
-                       border_radius=10)
-        
-        # Sombra para el número (efecto Vegas)
-        shadow_offset = 4
-        
-        # Texto con sombra para efecto retro
-        shadow_text = font_big.render(str(game_state.current_number), True, cfg.BLACK)
-        shadow_rect = shadow_text.get_rect(center=(rect_center[0]+shadow_offset, rect_center[1]+shadow_offset))
-        screen.blit(shadow_text, shadow_rect)
-        
-        # Dibujar el número grande con tipografía sans-serif
-        number_text = font_big.render(str(game_state.current_number), True, number_color)
-        text_rect = number_text.get_rect(center=rect_center)
-        screen.blit(number_text, text_rect)
-        
-        # Título con estilo Las Vegas (más llamativo)
-        # Sombra para el texto - texto más corto para que quepa en el marco
-        shadow_label = font_small.render("NÚMERO", True, cfg.BLACK)
-        shadow_label_rect = shadow_label.get_rect(center=(rect_center[0]+2, rect_center[1] - rect_height // 2 - 15 + 2))
-        screen.blit(shadow_label, shadow_label_rect)
-        
-        # Texto principal dorado estilo Vegas
-        label_text = font_small.render("NÚMERO", True, cfg.GLOW_COLOR)
-        label_rect = label_text.get_rect(center=(rect_center[0], rect_center[1] - rect_height // 2 - 15))
+        # Etiqueta "ACTUAL"
+        label_font = fonts["number_small"]
+        label_text = label_font.render("ACTUAL", True, cfg.GRAY)
+        label_rect = label_text.get_rect(center=(container_rect.centerx, container_rect.top + scale_value(16)))
         screen.blit(label_text, label_rect)
         
-        # Contador con estilo Vegas (dorado brillante)
-        # Sombra para el contador
-        shadow_count = font_medium.render(f"{len(game_state.drawn_numbers)}/{cfg.TOTAL_NUMBERS}", True, cfg.BLACK)
-        shadow_count_rect = shadow_count.get_rect(center=(rect_center[0]+2, rect_center[1] + rect_height // 2 + 30 + 2))
-        screen.blit(shadow_count, shadow_count_rect)
-        
-        # Contador principal
-        count_text = font_medium.render(f"{len(game_state.drawn_numbers)}/{cfg.TOTAL_NUMBERS}", True, cfg.GLOW_COLOR)
-        count_rect = count_text.get_rect(center=(rect_center[0], rect_center[1] + rect_height // 2 + 30))
-        screen.blit(count_text, count_rect)
+        # Contador de progreso
+        counter_text = f"{len(game_state.drawn_numbers)}/{cfg.TOTAL_NUMBERS}"
+        counter_font = fonts["number_small"]
+        counter_surface = counter_font.render(counter_text, True, cfg.LIGHT_GRAY)
+        counter_rect = counter_surface.get_rect(center=(container_rect.centerx, container_rect.bottom - scale_value(16)))
+        screen.blit(counter_surface, counter_rect)
 
 def select_number():
     """Selecciona un número aleatorio que no haya salido previamente.
@@ -648,6 +985,10 @@ def select_number():
             # Activar animación para el nuevo número
             game_state.number_animation_start = pygame.time.get_ticks()
             game_state.number_animation_active = True
+            
+            # Iniciar transiciones suaves
+            game_state.transitions.start_transition('number_scale', 0.5, 1.0, 600, 'bounce')
+            game_state.transitions.start_transition('number_glow', 0.0, 1.0, 400, 'ease_out')
             
             # Reproducir audio inmediatamente
             try:
@@ -678,6 +1019,20 @@ def select_number():
         print(f"Error en select_number: {e}")
         return None
 
+def draw_rounded_rect(surface, color, rect, radius):
+    """Dibuja un rectángulo con esquinas redondeadas"""
+    if len(color) == 4:  # Color con alpha
+        # Crear superficie temporal para alpha blending
+        temp_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(temp_surface, color, (0, 0, rect.width, rect.height), border_radius=radius)
+        surface.blit(temp_surface, rect)
+    else:
+        pygame.draw.rect(surface, color, rect, border_radius=radius)
+
+def draw_rounded_rect_outline(surface, color, rect, radius, width):
+    """Dibuja el contorno de un rectángulo con esquinas redondeadas"""
+    pygame.draw.rect(surface, color, rect, width, border_radius=radius)
+
 def get_number_color_and_glow(num):
     """Determina el color y brillo de un número según el modo de juego"""
     if cfg.TOTAL_NUMBERS == 90:
@@ -698,182 +1053,203 @@ def get_number_color_and_glow(num):
             return cfg.RANGE_61_90, (255, 0, 110)
 
 def draw_number_history():
-    """Dibuja el historial de números sorteados con ajuste automático de tamaño."""
-    # POSICIÓN COORDINADA: Lado derecho perfectamente alineado
-    history_width = int(cfg.WIDTH * 0.22)   # 22% del ancho para mejor visibilidad
-    history_height = int(cfg.HEIGHT * 0.65) # 65% de la altura
-    history_rect = pygame.Rect(
-        cfg.WIDTH - history_width - scale_value(30),  # Margen derecho
-        scale_value(40, False),                      # Alineado con número actual
-        history_width,
-        history_height
-    )
+    """Dibuja el historial de números sorteados con diseño moderno tipo cards."""
+    # Obtener configuración adaptativa
+    adaptive_config = get_adaptive_config()
     
-    # Efecto de brillo neón alrededor del historial
-    for i in range(5, 0, -1):
-        glow_rect = pygame.Rect(history_rect.x-i, history_rect.y-i, history_rect.width+i*2, history_rect.height+i*2)
-        alpha = int(50 - i * 8)  # Disminuir alpha gradualmente
-        s = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-        s.fill((255, 165, 0, alpha))  # Naranja con transparencia (nueva paleta)
-        screen.blit(s, (glow_rect.x, glow_rect.y))
+    # Configuración responsiva del panel
+    panel_width = int(cfg.WIDTH * adaptive_config["history_width_ratio"])
+    panel_height = int(cfg.HEIGHT * 0.7)  # Mantener proporción vertical
+    panel_x = cfg.WIDTH - panel_width - scale_value(24, min_value=16, max_value=32)
+    panel_y = scale_value(24, False, min_value=16, max_value=48)
     
-    # Marco estilo Vegas
-    pygame.draw.rect(screen, cfg.WHITE, history_rect, border_radius=10)
-    pygame.draw.rect(screen, cfg.BORDER_COLOR, history_rect, 2, border_radius=10)
+    panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+    corner_radius = scale_value(12)
     
-    # TÍTULO DEL HISTORIAL: Prominente y bien posicionado
-    shadow_offset = 3
-    shadow_title = font_medium.render("HISTORIAL", True, cfg.BLACK)
-    shadow_title_rect = shadow_title.get_rect(midtop=(history_rect.centerx + shadow_offset, history_rect.top + 20 + shadow_offset))
-    screen.blit(shadow_title, shadow_title_rect)
+    # Sombra del panel
+    shadow_rect = panel_rect.copy()
+    shadow_rect.x += scale_value(6)
+    shadow_rect.y += scale_value(6)
+    draw_rounded_rect(screen, (0, 0, 0, 32), shadow_rect, corner_radius)
     
-    # Título principal con color dorado Vegas
-    title_text = font_medium.render("HISTORIAL", True, cfg.GLOW_COLOR)
-    title_rect = title_text.get_rect(midtop=(history_rect.centerx, history_rect.top + 20))
+    # Fondo del panel
+    draw_rounded_rect(screen, cfg.FRAME_COLOR, panel_rect, corner_radius)
+    
+    # Borde del panel
+    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, panel_rect, corner_radius, scale_value(2))
+    
+    # Header del panel
+    header_height = scale_value(60, False)
+    header_rect = pygame.Rect(panel_x, panel_y, panel_width, header_height)
+    
+    # Título moderno
+    title_font = fonts["title_small"]
+    title_text = title_font.render("HISTORIAL", True, cfg.TEXT_COLOR)
+    title_rect = title_text.get_rect(center=(header_rect.centerx, header_rect.centery - scale_value(8, False)))
     screen.blit(title_text, title_rect)
     
+    # Contador de números
+    if game_state.drawn_numbers:
+        count_text = f"{len(game_state.drawn_numbers)} números sorteados"
+        count_font = fonts["number_small"]
+        count_surface = count_font.render(count_text, True, cfg.GRAY)
+        count_rect = count_surface.get_rect(center=(header_rect.centerx, header_rect.centery + scale_value(12, False)))
+        screen.blit(count_surface, count_rect)
+    
+    # Línea separadora
+    separator_y = panel_y + header_height
+    separator_rect = pygame.Rect(panel_x + scale_value(16), separator_y, panel_width - scale_value(32), scale_value(1))
+    pygame.draw.rect(screen, cfg.BORDER_COLOR, separator_rect)
+    
     if not game_state.drawn_numbers:
-        # Mensaje cuando no hay números - estilo Vegas con nueva paleta
-        text_shadow = font_medium.render("Sin números", True, cfg.BLACK)
-        text_rect_shadow = text_shadow.get_rect(center=(history_rect.centerx+2, history_rect.centery+2))
-        screen.blit(text_shadow, text_rect_shadow)
+        # Estado vacío con diseño moderno
+        empty_y = panel_rect.centery
+        empty_font = fonts["number_small"]
         
-        text = font_medium.render("Sin números", True, cfg.BUTTON_COLOR)  # Rojo de la nueva paleta
-        text_rect = text.get_rect(center=(history_rect.centerx, history_rect.centery))
-        screen.blit(text, text_rect)
+        # Icono placeholder (usando texto)
+        icon_text = "○"
+        icon_font = fonts["title_small"]
+        icon_surface = icon_font.render(icon_text, True, cfg.GRAY)
+        icon_rect = icon_surface.get_rect(center=(panel_rect.centerx, empty_y - scale_value(20, False)))
+        screen.blit(icon_surface, icon_rect)
+        
+        # Mensaje
+        message_text = "Sin números sorteados"
+        message_surface = empty_font.render(message_text, True, cfg.GRAY)
+        message_rect = message_surface.get_rect(center=(panel_rect.centerx, empty_y + scale_value(10, False)))
+        screen.blit(message_surface, message_rect)
+        
         return
     
-    # AJUSTE AUTOMÁTICO DE TAMAÑO SEGÚN CANTIDAD DE NÚMEROS
+    # Área de contenido
+    content_y = separator_y + scale_value(16, False)
+    content_height = panel_height - header_height - scale_value(32, False)
+    content_rect = pygame.Rect(panel_x + scale_value(16), content_y, panel_width - scale_value(32), content_height)
+    
+    # Configuración adaptativa de la grilla
     sorted_numbers = sorted(game_state.drawn_numbers)
     num_count = len(sorted_numbers)
     
-    # Determinar configuración de cuadrícula según cantidad de números
-    if num_count <= 12:
+    # Determinar layout óptimo
+    if num_count <= 15:
         cols = 3
-        cell_size = scale_value(45)  # Celdas grandes
-        font_to_use = font_small
-    elif num_count <= 24:
-        cols = 3
-        cell_size = scale_value(38)  # Celdas medianas
-        font_to_use = font_small
-    elif num_count <= 36:
+        card_size = scale_value(36)
+        font_to_use = fonts["number_small"]
+        spacing = scale_value(8)
+    elif num_count <= 30:
         cols = 4
-        cell_size = scale_value(32)  # Celdas más pequeñas
-        font_to_use = font_smallest
-    elif num_count <= 54:
+        card_size = scale_value(32)
+        font_to_use = fonts["number_small"]
+        spacing = scale_value(6)
+    elif num_count <= 50:
         cols = 4
-        cell_size = scale_value(28)  # Celdas pequeñas
+        card_size = scale_value(28)
         font_to_use = font_smallest
+        spacing = scale_value(5)
     else:
         cols = 5
-        cell_size = scale_value(24)  # Celdas muy pequeñas
+        card_size = scale_value(24)
         font_to_use = font_smallest
+        spacing = scale_value(4)
     
-    rows = (num_count + cols - 1) // cols
+    # Calcular posiciones
+    grid_width = cols * card_size + (cols - 1) * spacing
+    grid_start_x = content_rect.x + (content_rect.width - grid_width) // 2
     
-    # Títulos de rango con paleta moderna (adaptados al modo de juego)
-    if cfg.TOTAL_NUMBERS == 90:
-        # Modo normal: 1-90
-        range_titles = ["1-30", "31-60", "61-90"]
-        range_colors = [cfg.RANGE_1_30, cfg.RANGE_31_60, cfg.RANGE_61_90]
-    else:
-        # Modo alterno: 1-75
-        range_titles = ["1-25", "26-50", "51-75"]
-        range_colors = [cfg.RANGE_1_30, cfg.RANGE_31_60, cfg.RANGE_61_90]
+    # Dibujar números como cards modernas
+    max_visible = min(num_count, 60)  # Límite para performance
     
-    # Barra de títulos con rangos - adaptada al nuevo tamaño
-    range_bar_y = history_rect.top + scale_value(60)
-    range_bar_height = scale_value(25)
-    
-    # Ajustar tamaño de etiquetas según el espacio disponible
-    label_width = min(scale_value(40), (history_rect.width - 40) // 3 - 10)
-    spacing = (history_rect.width - (label_width * 3)) / 4
-    
-    for i in range(3):
-        x_pos = history_rect.left + spacing + i * (label_width + spacing)
-        label_rect = pygame.Rect(x_pos, range_bar_y, label_width, range_bar_height)
-        pygame.draw.rect(screen, cfg.BACKGROUND_COLOR, label_rect, 0, border_radius=5)
-        pygame.draw.rect(screen, range_colors[i], label_rect, 2, border_radius=5)
-        
-        # Texto con sombra
-        shadow_text = font_smallest.render(range_titles[i], True, cfg.BLACK)
-        shadow_rect = shadow_text.get_rect(center=(label_rect.centerx + 1, label_rect.centery + 1))
-        screen.blit(shadow_text, shadow_rect)
-        
-        range_text = font_smallest.render(range_titles[i], True, range_colors[i])
-        range_rect = range_text.get_rect(center=(label_rect.centerx, label_rect.centery))
-        screen.blit(range_text, range_rect)
-    
-    # Calcular área disponible para la cuadrícula
-    available_height = history_rect.height - scale_value(120)  # Espacio para título y rangos
-    grid_start_y = range_bar_y + range_bar_height + scale_value(15)
-    
-    # Calcular espaciado dinámico
-    total_grid_height = rows * cell_size + (rows - 1) * scale_value(5)
-    if total_grid_height > available_height:
-        # Ajustar espaciado si no cabe
-        spacing_y = max(2, (available_height - rows * cell_size) // max(1, rows - 1))
-    else:
-        spacing_y = scale_value(5)
-    
-    # Calcular espaciado horizontal
-    total_grid_width = cols * cell_size + (cols - 1) * scale_value(5)
-    grid_start_x = history_rect.left + (history_rect.width - total_grid_width) // 2
-    spacing_x = scale_value(5)
-    
-    # Calcular cuántos números podemos mostrar
-    max_visible_numbers = min(num_count, 60)  # Máximo 60 números visibles
-    
-    for i, num in enumerate(sorted_numbers[:max_visible_numbers]):
-        col = i % cols
+    for i, number in enumerate(sorted_numbers[:max_visible]):
         row = i // cols
+        col = i % cols
         
-        # Calcular posición
-        x = grid_start_x + col * (cell_size + spacing_x)
-        y = grid_start_y + row * (cell_size + spacing_y)
+        # Posición de la card
+        card_x = grid_start_x + col * (card_size + spacing)
+        card_y = content_y + row * (card_size + spacing)
         
-        # Verificar si la celda cabe en el área disponible
-        if y + cell_size > history_rect.bottom - scale_value(30):
+        # Verificar si cabe en el área visible
+        if card_y + card_size > content_rect.bottom:
             # Mostrar indicador de números restantes
             remaining = num_count - i
             if remaining > 0:
-                more_shadow = font_smallest.render(f"+ {remaining} más", True, cfg.BLACK)
-                more_shadow_rect = more_shadow.get_rect(center=(history_rect.centerx+1, history_rect.bottom - 20+1))
-                screen.blit(more_shadow, more_shadow_rect)
-                
-                more_text = font_smallest.render(f"+ {remaining} más", True, cfg.GLOW_COLOR)
-                more_rect = more_text.get_rect(center=(history_rect.centerx, history_rect.bottom - 20))
-                screen.blit(more_text, more_rect)
+                more_y = content_rect.bottom - scale_value(20, False)
+                more_text = f"+ {remaining} más"
+                more_font = font_smallest
+                more_surface = more_font.render(more_text, True, cfg.GRAY)
+                more_rect = more_surface.get_rect(center=(content_rect.centerx, more_y))
+                screen.blit(more_surface, more_rect)
             break
         
-        # Determinar color basado en el rango del número
-        number_color, glow_color = get_number_color_and_glow(num)
+        card_rect = pygame.Rect(card_x, card_y, card_size, card_size)
         
-        # Dibujar celda
-        cell_rect = pygame.Rect(x, y, cell_size, cell_size)
+        # Determinar colores
+        range_color, glow_color = get_number_color_and_glow(number)
         
-        # Destacar el número actual
-        if num == game_state.current_number:
-            # Efecto de brillo pulsante
-            pulse = abs(math.sin(pygame.time.get_ticks() / 300)) * 0.5 + 0.5
-            for j in range(3, 0, -1):
-                glow_rect = cell_rect.inflate(j * 2, j * 2)
-                alpha = int(pulse * (80 - j * 20))
-                s = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-                s.fill((*glow_color, alpha))
-                screen.blit(s, glow_rect)
+        # Estado especial para número actual
+        is_current = number == game_state.current_number
+        
+        if is_current:
+            # Efecto de brillo para número actual
+            current_time = pygame.time.get_ticks()
+            pulse = 0.7 + 0.3 * math.sin(current_time / 400)
             
-            pygame.draw.rect(screen, number_color, cell_rect, border_radius=6)
-            text_color = cfg.BLACK if num > 30 and num <= 60 else cfg.TEXT_COLOR
+            # Brillo exterior
+            glow_rect = card_rect.inflate(scale_value(6), scale_value(6))
+            glow_alpha = int(100 * pulse)
+            draw_rounded_rect(screen, (*glow_color[:3], glow_alpha), glow_rect, scale_value(6))
+            
+            # Card con color intenso
+            draw_rounded_rect(screen, range_color, card_rect, scale_value(4))
+            
+            # Borde brillante
+            draw_rounded_rect_outline(screen, cfg.HIGHLIGHT_COLOR, card_rect, scale_value(4), scale_value(2))
+            
+            # Texto contrastante
+            text_color = cfg.BLACK if range_color == cfg.ACCENT_COLOR else cfg.TEXT_COLOR
         else:
-            pygame.draw.rect(screen, cfg.WHITE, cell_rect, border_radius=6)
-            pygame.draw.rect(screen, number_color, cell_rect, 2, border_radius=6)
-            text_color = number_color
+            # Card normal
+            # Fondo con color del rango pero más sutil
+            bg_color = tuple(int(c * 0.8) for c in range_color[:3])  # 80% del color original
+            draw_rounded_rect(screen, bg_color, card_rect, scale_value(4))
+            
+            # Borde sutil
+            draw_rounded_rect_outline(screen, range_color, card_rect, scale_value(4), scale_value(1))
+            
+            # Texto con color del rango
+            text_color = range_color
         
-        # Renderizar número con fuente apropiada
-        num_text = font_to_use.render(str(num), True, text_color)
-        num_rect = num_text.get_rect(center=cell_rect.center)
-        screen.blit(num_text, num_rect)
+        # Renderizar número
+        number_surface = font_to_use.render(str(number), True, text_color)
+        number_rect = number_surface.get_rect(center=card_rect.center)
+        screen.blit(number_surface, number_rect)
+    
+    # Leyenda de colores en la parte inferior
+    if num_count > 0:
+        legend_y = panel_rect.bottom - scale_value(50, False)
+        legend_font = font_smallest
+        
+        # Determinar rangos según el modo
+        if cfg.TOTAL_NUMBERS == 90:
+            ranges = [("1-30", cfg.RANGE_1_30), ("31-60", cfg.RANGE_31_60), ("61-90", cfg.RANGE_61_90)]
+        else:
+            ranges = [("1-25", cfg.RANGE_1_30), ("26-50", cfg.RANGE_31_60), ("51-75", cfg.RANGE_61_90)]
+        
+        # Dibujar leyenda horizontal
+        legend_width = panel_width - scale_value(32)
+        legend_item_width = legend_width // 3
+        
+        for i, (range_text, color) in enumerate(ranges):
+            item_x = panel_x + scale_value(16) + i * legend_item_width
+            item_center_x = item_x + legend_item_width // 2
+            
+            # Círculo de color
+            circle_radius = scale_value(4)
+            pygame.draw.circle(screen, color, (item_center_x - scale_value(15), legend_y), circle_radius)
+            
+            # Texto del rango
+            range_surface = legend_font.render(range_text, True, cfg.GRAY)
+            range_rect = range_surface.get_rect(left=item_center_x - scale_value(8), centery=legend_y)
+            screen.blit(range_surface, range_rect)
 
 def draw_bingo_animation():
     """Muestra una animación estilo Las Vegas cuando se presiona el botón BINGO."""
@@ -929,8 +1305,8 @@ def draw_bingo_animation():
         # Texto "BINGO" grande y centrado con estilo Vegas
         font_size = int(140 * scale)
         if font_size > 0:  # Evitar tamaños de fuente negativos o cero
-            # Usar fuente sans-serif para estilo Vegas
-            bingo_font = pygame.font.SysFont(font_names, font_size, bold=True)
+            # Usar JetBrains Mono para estilo profesional
+            bingo_font = cfg.get_font(font_size, bold=True)
             
             # Varias capas de texto para efecto neón/resplandor con nueva paleta
             # Capa de resplandor externa - alternando dorado y rojo
@@ -955,7 +1331,7 @@ def draw_bingo_animation():
             if progress > 0.3 and progress < 0.9:
                 winner_scale = min(1.0, (progress - 0.3) * 3)
                 winner_size = int(50 * winner_scale)
-                winner_font = pygame.font.SysFont(font_names, winner_size, bold=True)
+                winner_font = cfg.get_font(winner_size, bold=True)
                 
                 # Texto con sombra
                 winner_shadow = winner_font.render("¡GANADOR!", True, cfg.BLACK)
@@ -969,7 +1345,7 @@ def draw_bingo_animation():
                 
         # Añadir instrucciones para continuar jugando cuando está cerca de terminar
         if progress > 0.7:
-            continue_font = pygame.font.SysFont(font_names, 30, bold=True)
+            continue_font = cfg.get_font(30, bold=True)
             continue_text = continue_font.render("Presiona REINICIAR para jugar otra partida", True, cfg.TEXT_COLOR)
             continue_rect = continue_text.get_rect(center=(cfg.WIDTH//2, cfg.HEIGHT//2 + 170))
             screen.blit(continue_text, continue_rect)
@@ -1285,6 +1661,11 @@ while game_state.running:
             seconds = elapsed % 60
             time_text = font_small.render(f"Tiempo: {minutes:02d}:{seconds:02d}", True, cfg.BLACK)
             screen.blit(time_text, (10, 10))
+    
+    # Actualizar tooltips
+    if not game_state.show_title_screen:
+        game_state.tooltips.update()
+        game_state.tooltips.draw(screen)
     
     # Recargar fuentes si la resolución cambió (solo durante pruebas)
     if cfg.WIDTH != int(BASE_WIDTH * SCALE_X) or cfg.HEIGHT != int(BASE_HEIGHT * SCALE_Y):
