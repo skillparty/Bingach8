@@ -16,6 +16,11 @@ import config as cfg
 # Importar pantalla de título
 from title_screen import TitleScreen
 
+# Importar módulos multijugador
+from mode_selection import ModeSelection
+from multiplayer_manager import get_multiplayer_manager
+from bingo_card_renderer import BingoCardRenderer
+
 # Variables para manejo de escala y responsividad
 global SCALE_X, SCALE_Y
 SCALE_X = 1.0  # Factor de escala horizontal
@@ -411,6 +416,7 @@ class GameState:
     def __init__(self):
         self.running = True
         self.show_title_screen = True
+        self.show_mode_selection = False  # Nueva: pantalla de selección de modo
         self.game_started = False
         self.game_over = False
         self.board = [[None for _ in range(cfg.BOARD_COLS)] for _ in range(cfg.BOARD_ROWS)]
@@ -457,6 +463,12 @@ game_state = GameState()
 # Crear instancia de la pantalla de título
 title_screen = TitleScreen(screen)
 title_screen.start_animation()
+
+# Crear instancia del selector de modo
+mode_selection = ModeSelection(screen)
+
+# Obtener gestor multijugador
+multiplayer_manager = get_multiplayer_manager()
 
 # Clase para las pelotas
 class Ball:
@@ -998,6 +1010,11 @@ def select_number():
             game_state.transitions.start_transition('number_scale', 0.5, 1.0, 600, 'bounce')
             game_state.transitions.start_transition('number_glow', 0.0, 1.0, 400, 'ease_out')
             
+            # Si estamos en modo servidor, enviar el número a los clientes
+            if multiplayer_manager.is_server_mode():
+                multiplayer_manager.send_number_to_clients(number)
+                print(f"Número {number} enviado a los clientes")
+            
             # Reproducir audio inmediatamente
             try:
                 audio_path = f"audios_wav/numero_{number}.wav"
@@ -1445,6 +1462,16 @@ def reset_game():
     # Reinicializar el tablero
     game_state.initialize_board()
     
+    # Si estamos en modo servidor, enviar señal de reset a los clientes
+    if multiplayer_manager.is_server_mode():
+        multiplayer_manager.send_game_reset()
+        print("Señal de reset enviada a los clientes")
+    
+    # Si estamos en modo cliente, reiniciar la cartilla
+    if multiplayer_manager.is_client_mode() and multiplayer_manager.player_card:
+        multiplayer_manager.player_card.marked.clear()
+        print("Cartilla reiniciada")
+    
     # Reproducir sonido de reinicio
     try:
         reset_sound = pygame.mixer.Sound(f"{cfg.AUDIO_FOLDER}/reset.{cfg.AUDIO_FILE_FORMAT}")
@@ -1528,32 +1555,110 @@ while game_state.running:
         elif event.type == KEYDOWN:
             if event.key == K_ESCAPE:
                 game_state.running = False
+            elif event.key == K_SPACE:
+                # Tecla ESPACIO: sortear siguiente número (solo en modo local o servidor)
+                if not game_state.show_title_screen and not game_state.show_mode_selection:
+                    # Solo permitir en modo local o servidor (no en modo cliente)
+                    if multiplayer_manager.is_local_mode() or multiplayer_manager.is_server_mode():
+                        if game_state.game_started:
+                            # Sortear siguiente número
+                            try:
+                                select_number()
+                                game_state.number_animation_start = pygame.time.get_ticks()
+                                print("⌨️  Número sorteado con ESPACIO")
+                            except Exception as e:
+                                print(f"Error al sortear con ESPACIO: {e}")
+                        else:
+                            # Si el juego no ha empezado, iniciarlo con ESPACIO
+                            game_state.game_started = True
+                            game_state.start_time = pygame.time.get_ticks()
+                            try:
+                                select_number()
+                                game_state.number_animation_start = pygame.time.get_ticks()
+                                print("⌨️  Juego iniciado con ESPACIO")
+                            except Exception as e:
+                                print(f"Error al iniciar con ESPACIO: {e}")
         elif game_state.show_title_screen:
             # Manejar eventos de la pantalla de título
             result = title_screen.handle_event(event)
             if result == "start_normal_game":
-                # Configurar juego normal (9x10, números 1-90)
-                cfg.BOARD_ROWS = 9
-                cfg.BOARD_COLS = 10
-                cfg.TOTAL_NUMBERS = 90
-                game_state.__init__()  # Reinicializar con nueva configuración
-                # Establecer estados después de la reinicialización
+                # Ir a la selección de modo en lugar de iniciar directamente
                 game_state.show_title_screen = False
-                game_state.game_started = True
-                print(f"✅ Iniciando juego NORMAL: Tablero {cfg.BOARD_ROWS}x{cfg.BOARD_COLS}, números 1-{cfg.TOTAL_NUMBERS}")
+                game_state.show_mode_selection = True
+                print("✅ Mostrando selección de modo")
             elif result == "start_alt_game":
-                # Configurar juego alterno (7x11, números 1-75)
+                # Modo alterno no soportado en multijugador por ahora
                 cfg.BOARD_ROWS = 7
                 cfg.BOARD_COLS = 11
                 cfg.TOTAL_NUMBERS = 75
-                game_state.__init__()  # Reinicializar con nueva configuración
-                # Establecer estados después de la reinicialización
+                game_state.__init__()
                 game_state.show_title_screen = False
                 game_state.game_started = True
                 print(f"✅ Iniciando juego ALTERNO: Tablero {cfg.BOARD_ROWS}x{cfg.BOARD_COLS}, números 1-{cfg.TOTAL_NUMBERS}")
             elif result == "exit_game":
                 pygame.quit()
                 sys.exit()
+        elif game_state.show_mode_selection:
+            # Manejar eventos de la selección de modo
+            if event.type == MOUSEBUTTONDOWN:
+                action = mode_selection.handle_click(event.pos)
+                
+                if action == "start_local":
+                    # Modo local (juego tradicional)
+                    cfg.BOARD_ROWS = 9
+                    cfg.BOARD_COLS = 10
+                    cfg.TOTAL_NUMBERS = 90
+                    game_state.__init__()
+                    game_state.show_mode_selection = False
+                    game_state.game_started = True
+                    print("✅ Modo LOCAL iniciado")
+                    
+                elif action == "start_server":
+                    # Modo servidor
+                    config = mode_selection.get_config()
+                    cfg.BOARD_ROWS = 9
+                    cfg.BOARD_COLS = 10
+                    cfg.TOTAL_NUMBERS = 90
+                    
+                    # Iniciar servidor
+                    success = multiplayer_manager.start_server_mode(config["nickname"])
+                    if success:
+                        game_state.__init__()
+                        game_state.show_mode_selection = False
+                        game_state.game_started = False  # Esperará a que se presione INICIAR
+                        print(f"✅ Modo SERVIDOR iniciado como '{config['nickname']}'")
+                    else:
+                        mode_selection.set_error("Error iniciando servidor")
+                        
+                elif action == "start_client":
+                    # Modo cliente
+                    config = mode_selection.get_config()
+                    cfg.BOARD_ROWS = 9
+                    cfg.BOARD_COLS = 10
+                    cfg.TOTAL_NUMBERS = 90
+                    
+                    # Conectar como cliente
+                    card_position = (50, 300)  # Posición de la cartilla
+                    success = multiplayer_manager.start_client_mode(
+                        config["nickname"],
+                        config["server_ip"],
+                        screen=screen,
+                        position=card_position
+                    )
+                    
+                    if success:
+                        game_state.__init__()
+                        game_state.show_mode_selection = False
+                        game_state.game_started = False  # El servidor controlará el inicio
+                        print(f"✅ Modo CLIENTE iniciado como '{config['nickname']}'")
+                    else:
+                        mode_selection.set_error("Error conectando al servidor")
+                        
+            elif event.type == KEYDOWN:
+                action = mode_selection.handle_keypress(event)
+                if action in ["start_server", "start_client"]:
+                    # Simular click en el botón de inicio
+                    pass
         else:
             # Manejar eventos del juego principal
             if event.type == MOUSEMOTION:
@@ -1582,7 +1687,13 @@ while game_state.running:
     if game_state.show_title_screen:
         # Actualizar la pantalla de título
         title_screen.update()
+    elif game_state.show_mode_selection:
+        # No hay actualización necesaria para la pantalla de selección de modo
+        pass
     else:
+        # Actualizar el gestor multijugador (procesar mensajes de clientes)
+        if multiplayer_manager.is_client_mode():
+            multiplayer_manager.update()
         # Actualizar animación de BINGO
         if game_state.bingo_animation_active:
             if current_time - game_state.bingo_animation_start > game_state.bingo_animation_duration:
@@ -1625,6 +1736,9 @@ while game_state.running:
     if game_state.show_title_screen:
         # Mostrar la pantalla de título
         title_screen.draw()
+    elif game_state.show_mode_selection:
+        # Mostrar la pantalla de selección de modo
+        mode_selection.draw()
     else:
         # Limpiar la pantalla con el fondo adecuado
         if background_images:  # Verificar que tengamos al menos una imagen
@@ -1644,6 +1758,26 @@ while game_state.running:
         draw_board()
         
         # Ya no se dibujan pelotas - fueron eliminadas
+        
+        # Dibujar cartilla del cliente si está en modo cliente
+        if multiplayer_manager.is_client_mode():
+            multiplayer_manager.draw_card(screen)
+            
+            # Mostrar estado de conexión
+            status = multiplayer_manager.get_connection_status()
+            status_font = cfg.get_font(24)
+            status_text = f"Conectado: {status['nickname']} | Jugadores: {status['total_players']}"
+            status_color = cfg.SUCCESS if status['connected'] else cfg.DANGER
+            status_surface = status_font.render(status_text, True, status_color)
+            screen.blit(status_surface, (50, 50))
+        
+        # Mostrar información del servidor si está en modo servidor
+        if multiplayer_manager.is_server_mode():
+            status = multiplayer_manager.get_connection_status()
+            status_font = cfg.get_font(24)
+            server_text = f"Servidor: {status['nickname']} | IP: {status['ip']} | Clientes: {status['connected_clients']}"
+            status_surface = status_font.render(server_text, True, cfg.PRIMARY_COLOR)
+            screen.blit(status_surface, (50, 50))
         
         # Dibujar los botones con efectos de hover
         draw_buttons()
