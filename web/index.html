@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bingacho - Espectador</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #stream-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        #stream-image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            background-color: #e91e63;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, background-color 0.2s;
+            box-shadow: 0 4px 15px rgba(233, 30, 99, 0.4);
+        }
+        button:hover {
+            background-color: #c2185b;
+            transform: scale(1.05);
+        }
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            pointer-events: none;
+            z-index: 20;
+        }
+        #fullscreen-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            z-index: 20;
+            transition: background-color 0.2s;
+        }
+        #fullscreen-btn:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="stream-container">
+        <img id="stream-image" src="" alt="Esperando transmisión...">
+        <div id="status">Desconectado</div>
+        <button id="fullscreen-btn" class="hidden">⛶ Pantalla Completa</button>
+        <div id="debug-info" style="position: absolute; bottom: 10px; left: 10px; font-size: 10px; color: rgba(255,255,255,0.5);"></div>
+    </div>
+
+    <div id="overlay">
+        <h1>Bingacho Espectador</h1>
+        <p>Toca para conectar y habilitar audio</p>
+        <button id="connect-btn">Conectar</button>
+        <p id="connection-details" style="font-size: 0.8rem; margin-top: 10px; color: #aaa;"></p>
+    </div>
+
+    <script>
+        const connectBtn = document.getElementById('connect-btn');
+        const overlay = document.getElementById('overlay');
+        const streamImage = document.getElementById('stream-image');
+        const statusDiv = document.getElementById('status');
+        const debugInfo = document.getElementById('debug-info');
+        const connectionDetails = document.getElementById('connection-details');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        
+        let ws = null;
+        let reconnectInterval = null;
+
+        // Obtener IP del host de la URL actual
+        const host = window.location.hostname;
+        let wsPort = 8765; // Puerto por defecto
+        let wsUrl = `ws://${host}:${wsPort}`;
+        
+        // Función para obtener la configuración del servidor
+        async function fetchConfig() {
+            try {
+                const response = await fetch('/config.json');
+                if (response.ok) {
+                    const config = await response.json();
+                    if (config.ws_port) {
+                        wsPort = config.ws_port;
+                        wsUrl = `ws://${host}:${wsPort}`;
+                        console.log("Configuración cargada. Puerto WS:", wsPort);
+                    }
+                }
+            } catch (e) {
+                console.error("Error cargando config:", e);
+            }
+            
+            // Actualizar UI
+            connectionDetails.textContent = `Servidor en: ${wsUrl}`;
+            debugInfo.textContent = `WS: ${wsUrl}`;
+        }
+
+        // Cargar configuración al iniciar
+        fetchConfig();
+
+        connectBtn.addEventListener('click', () => {
+            startConnection();
+            // Intentar reproducir un audio silencioso para desbloquear el contexto de audio
+            unlockAudio();
+        });
+
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error al entrar en pantalla completa: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+
+        function unlockAudio() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                osc.connect(ctx.destination);
+                osc.start(0);
+                osc.stop(0.1);
+            }
+        }
+
+        function startConnection() {
+            overlay.classList.add('hidden');
+            statusDiv.textContent = "Conectando...";
+            
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log("Conectado al servidor");
+                statusDiv.textContent = "Conectado";
+                statusDiv.style.color = "#4caf50";
+                fullscreenBtn.classList.remove('hidden');
+                
+                // Registrarse como espectador
+                ws.send(JSON.stringify({
+                    type: "register",
+                    nickname: "MobileSpectator",
+                    role: "spectator"
+                }));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    handleMessage(msg);
+                } catch (e) {
+                    console.error("Error parseando mensaje:", e);
+                }
+            };
+
+            ws.onclose = (event) => {
+                console.log("Desconectado", event);
+                statusDiv.textContent = `Desconectado (Código: ${event.code}) - Reintentando...`;
+                statusDiv.style.color = "#f44336";
+                fullscreenBtn.classList.add('hidden');
+                ws = null;
+                
+                // Reintentar conexión en 3 segundos
+                if (!reconnectInterval) {
+                    reconnectInterval = setTimeout(() => {
+                        reconnectInterval = null;
+                        startConnection();
+                    }, 3000);
+                }
+            };
+
+            ws.onerror = (err) => {
+                console.error("Error WS:", err);
+                statusDiv.textContent = "Error de conexión";
+                ws.close();
+            };
+        }
+
+        function handleMessage(msg) {
+            if (msg.type === 'spectator_frame') {
+                if (msg.data) {
+                    // Soporte para JPG y PNG
+                    const fmt = msg.format === 'jpg' ? 'jpeg' : 'png';
+                    streamImage.src = `data:image/${fmt};base64,${msg.data}`;
+                }
+            } else if (msg.type === 'spectator_audio') {
+                if (msg.format === 'wav' && msg.data) {
+                    playAudio(msg.data);
+                }
+            }
+        }
+
+        function playAudio(base64Data) {
+            try {
+                const audio = new Audio(`data:audio/wav;base64,${base64Data}`);
+                audio.play().catch(e => console.error("Error reproduciendo audio:", e));
+            } catch (e) {
+                console.error("Error creando audio:", e);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "bingacho",
+  "version": "1.0.0",
+  "description": "Juego de bingo con audio genial y animaciones geniales.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skillparty/Bingach8.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/skillparty/Bingach8/issues"
+  },
+  "homepage": "https://github.com/skillparty/Bingach8#readme",
+  "dependencies": {
+    "@playwright/test": "^1.56.1"
+  }
+}

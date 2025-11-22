@@ -366,10 +366,10 @@ class TitleScreen:
         elif event.type == MOUSEBUTTONDOWN:
             if not self.show_game_menu:
                 if self.start_button_rect.collidepoint(event.pos):
-                    self.show_game_menu = True
+                    return "show_mode_selection"
             else:
                 if self.normal_game_rect.collidepoint(event.pos):
-                    return "start_normal_game"
+                    return "show_mode_selection"
                 elif self.alt_game_rect.collidepoint(event.pos):
                     return "start_alt_game"
                 elif self.back_button_rect.collidepoint(event.pos):
@@ -378,9 +378,9 @@ class TitleScreen:
         elif event.type == KEYDOWN:
             if event.key == K_SPACE or event.key == K_RETURN:
                 if not self.show_game_menu:
-                    self.show_game_menu = True
+                    return "show_mode_selection"
                 else:
-                    return "start_normal_game"  # Por defecto juego normal
+                    return "show_mode_selection"  # Ir a selección de modo
             elif event.key == K_ESCAPE:
                 if self.show_game_menu:
                     self.show_game_menu = False

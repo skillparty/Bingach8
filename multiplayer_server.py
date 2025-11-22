@@ -22,7 +22,7 @@ class BingachoServer:
         """
         self.host = host
         self.port = port
-        self.clients = {}  # {websocket: {"nickname": str, "connected_at": datetime}}
+        self.clients = {}  # {websocket: {"nickname": str, "connected_at": datetime, "role": "player"|"spectator"}}
         self.drawn_numbers = []  # Números sorteados en orden
         self.current_number = None  # Número actual
         self.game_started = False
@@ -49,9 +49,11 @@ class BingachoServer:
             websocket: Conexión WebSocket del cliente
             nickname: Nickname del cliente
         """
+        # Por defecto el cliente es un jugador; si envía role en el primer mensaje, será actualizado
         self.clients[websocket] = {
             "nickname": nickname,
-            "connected_at": datetime.now()
+            "connected_at": datetime.now(),
+            "role": "player"
         }
         
         print(f"Cliente conectado: {nickname} ({len(self.clients)} clientes totales)")
@@ -97,7 +99,7 @@ class BingachoServer:
             "game_started": self.game_started,
             "drawn_numbers": self.drawn_numbers,
             "current_number": self.current_number,
-            "total_players": len(self.clients)
+            "total_players": len([c for c in self.clients.values() if c.get("role") == "player"])
         }
         await websocket.send(json.dumps(state))
     
@@ -112,10 +114,7 @@ class BingachoServer:
         if self.clients:
             message_json = json.dumps(message)
             # Enviar a todos los clientes excepto el excluido
-            websockets_to_send = [
-                ws for ws in self.clients.keys() 
-                if ws != exclude
-            ]
+            websockets_to_send = [ws for ws in self.clients.keys() if ws != exclude]
             
             # Usar gather para enviar a todos simultáneamente
             if websockets_to_send:
@@ -123,6 +122,25 @@ class BingachoServer:
                     *[ws.send(message_json) for ws in websockets_to_send],
                     return_exceptions=True
                 )
+
+    async def broadcast_message_filtered(self, message, role_filter=None, exclude=None):
+        """
+        Envía un mensaje JSON a los clientes que coincidan con el role_filter.
+        role_filter: None (todos), 'player' o 'spectator'
+        """
+        if not self.clients:
+            return
+
+        message_json = json.dumps(message)
+        targets = []
+        for ws, meta in self.clients.items():
+            if ws == exclude:
+                continue
+            if role_filter is None or meta.get("role") == role_filter:
+                targets.append(ws)
+
+        if targets:
+            await asyncio.gather(*[ws.send(message_json) for ws in targets], return_exceptions=True)
     
     async def handle_new_number(self, number):
         """
@@ -163,13 +181,12 @@ class BingachoServer:
         })
         print("Juego reiniciado")
     
-    async def handle_client(self, websocket, path):
+    async def handle_client(self, websocket):
         """
         Maneja la conexión de un cliente
         
         Args:
             websocket: Conexión WebSocket
-            path: Ruta de la conexión
         """
         try:
             # Esperar mensaje de registro del cliente
@@ -178,8 +195,14 @@ class BingachoServer:
                 
                 # Primer mensaje debe ser el registro
                 if websocket not in self.clients:
-                    if data["type"] == "register":
-                        await self.register_client(websocket, data["nickname"])
+                    if data.get("type") == "register":
+                        nickname = data.get("nickname", "anon")
+                        role = data.get("role", "player")
+                        await self.register_client(websocket, nickname)
+                        # Actualizar role si el cliente lo especificó
+                        if websocket in self.clients:
+                            self.clients[websocket]["role"] = role
+                        print(f"Registro: {nickname} role={role}")
                     continue
                 
                 # Manejar diferentes tipos de mensajes
@@ -205,11 +228,40 @@ class BingachoServer:
     async def start(self):
         """Inicia el servidor"""
         try:
-            self.server = await websockets.serve(
-                self.handle_client,
-                self.host,
-                self.port
-            )
+            # Guardar loop actual para permitir run_coroutine_threadsafe desde otros hilos
+            self.loop = asyncio.get_event_loop()
+            
+            # Intentar iniciar el servidor con reuse_address=True para evitar problemas de puerto ocupado
+            # También intentamos bindear a 0.0.0.0 explícitamente si self.host no lo es
+            if not self.host:
+                self.host = '0.0.0.0'
+            
+            # Intentar encontrar un puerto libre comenzando desde self.port
+            start_port = self.port
+            max_attempts = 10
+            
+            for i in range(max_attempts):
+                current_port = start_port + i
+                print(f"Intentando iniciar servidor WS en {self.host}:{current_port}...")
+                
+                try:
+                    self.server = await websockets.serve(
+                        self.handle_client, 
+                        self.host, 
+                        current_port,
+                        ping_interval=20,  # Keep-alive ping every 20s
+                        ping_timeout=20    # Timeout after 20s
+                    )
+                    # Si llegamos aquí, el puerto funcionó
+                    self.port = current_port
+                    break
+                except OSError as e:
+                    if e.errno == 48: # Address already in use
+                        print(f"Puerto WS {current_port} ocupado, probando siguiente...")
+                        if i == max_attempts - 1:
+                            raise e # Si es el último intento, lanzar error
+                    else:
+                        raise e
             
             local_ip = self.get_local_ip()
             print(f"\n{'='*60}")
@@ -224,7 +276,10 @@ class BingachoServer:
             await asyncio.Future()  # Run forever
             
         except Exception as e:
-            print(f"Error iniciando servidor: {e}")
+            print(f"CRITICAL ERROR iniciando servidor WS: {e}")
+            import traceback
+            traceback.print_exc()
+            self.server = None
     
     async def stop(self):
         """Detiene el servidor"""
