@@ -7,7 +7,9 @@ import asyncio
 import websockets
 import json
 import socket
+import time
 from datetime import datetime
+from bingo_card import BingoCard
 
 class BingachoServer:
     """Servidor para gestionar partidas multijugador de Bingacho"""
@@ -27,6 +29,10 @@ class BingachoServer:
         self.current_number = None  # Número actual
         self.game_started = False
         self.server = None
+        self.interactive_players = {}  # {websocket: {'card': BingoCard, 'nickname': str}}
+        self.game_paused = False
+        self.game_mode = 90  # Número total: 90 o 75
+        self.latest_bingo_claim = None  # { 'player': str, 'valid': bool, 'reason': str, 'timestamp': float }
         
     def get_local_ip(self):
         """Obtiene la IP local del servidor"""
@@ -78,6 +84,8 @@ class BingachoServer:
         if websocket in self.clients:
             nickname = self.clients[websocket]["nickname"]
             del self.clients[websocket]
+            if websocket in self.interactive_players:
+                del self.interactive_players[websocket]
             print(f"Cliente desconectado: {nickname} ({len(self.clients)} clientes restantes)")
             
             # Notificar a todos los clientes
@@ -99,7 +107,8 @@ class BingachoServer:
             "game_started": self.game_started,
             "drawn_numbers": self.drawn_numbers,
             "current_number": self.current_number,
-            "total_players": len([c for c in self.clients.values() if c.get("role") == "player"])
+            "total_players": len([c for c in self.clients.values() if c.get("role") == "player"]),
+            "game_mode": self.game_mode
         }
         await websocket.send(json.dumps(state))
     
@@ -175,6 +184,20 @@ class BingachoServer:
         self.game_started = False
         self.drawn_numbers = []
         self.current_number = None
+        self.game_paused = False
+        self.latest_bingo_claim = None
+        
+        # Regenerar cartillas para jugadores interactivos
+        for ws, info in self.interactive_players.items():
+            new_card = BingoCard(card_id=info['nickname'])
+            info['card'] = new_card
+            try:
+                await ws.send(json.dumps({
+                    'type': 'assign_card',
+                    'card': new_card.to_dict()
+                }))
+            except:
+                pass
         
         await self.broadcast_message({
             "type": "game_reset"
@@ -203,6 +226,14 @@ class BingachoServer:
                         if websocket in self.clients:
                             self.clients[websocket]["role"] = role
                         print(f"Registro: {nickname} role={role}")
+                        # Asignar cartilla a jugadores interactivos
+                        if role == 'interactive_player':
+                            card = BingoCard(card_id=nickname)
+                            self.interactive_players[websocket] = {'card': card, 'nickname': nickname}
+                            await websocket.send(json.dumps({
+                                'type': 'assign_card',
+                                'card': card.to_dict()
+                            }))
                     continue
                 
                 # Manejar diferentes tipos de mensajes
@@ -217,6 +248,89 @@ class BingachoServer:
                 elif msg_type == "ping":
                     # Responder con pong
                     await websocket.send(json.dumps({"type": "pong"}))
+                elif msg_type == "mark_number":
+                    number = data.get("number")
+                    if websocket in self.interactive_players:
+                        player_info = self.interactive_players[websocket]
+                        card = player_info['card']
+                        if number not in self.drawn_numbers:
+                            await websocket.send(json.dumps({
+                                'type': 'mark_rejected',
+                                'number': number,
+                                'reason': 'not_called'
+                            }))
+                        elif not card.mark_number(number):
+                            await websocket.send(json.dumps({
+                                'type': 'mark_rejected',
+                                'number': number,
+                                'reason': 'not_on_card'
+                            }))
+                        else:
+                            all_numbers = [n for row in card.numbers for n in row if n is not None]
+                            await websocket.send(json.dumps({
+                                'type': 'mark_confirmed',
+                                'number': number,
+                                'marked_count': len(card.marked),
+                                'total': len(all_numbers)
+                            }))
+                elif msg_type == "bingo_claim":
+                    if websocket in self.interactive_players and not self.game_paused:
+                        player_info = self.interactive_players[websocket]
+                        card = player_info['card']
+                        nickname = player_info['nickname']
+                        self.game_paused = True
+                        await self.broadcast_message({
+                            'type': 'game_paused',
+                            'reason': 'bingo_claim',
+                            'player': nickname
+                        })
+                        if card.check_bingo():
+                            # Verificar que todos los números marcados están en drawn_numbers
+                            all_valid = all(n in self.drawn_numbers for n in card.marked)
+                            if all_valid:
+                                self.latest_bingo_claim = {
+                                    'player': nickname,
+                                    'valid': True,
+                                    'reason': None,
+                                    'timestamp': time.time()
+                                }
+                                await self.broadcast_message({
+                                    'type': 'bingo_result',
+                                    'valid': True,
+                                    'player': nickname,
+                                    'card': card.to_dict()
+                                })
+                                print(f"¡BINGO VÁLIDO! Ganador: {nickname}")
+                            else:
+                                self.game_paused = False
+                                self.latest_bingo_claim = {
+                                    'player': nickname,
+                                    'valid': False,
+                                    'reason': 'Números marcados no válidos',
+                                    'timestamp': time.time()
+                                }
+                                await self.broadcast_message({
+                                    'type': 'bingo_result',
+                                    'valid': False,
+                                    'player': nickname,
+                                    'reason': 'Números marcados no válidos'
+                                })
+                                await self.broadcast_message({'type': 'game_resumed'})
+                        else:
+                            self.game_paused = False
+                            self.latest_bingo_claim = {
+                                'player': nickname,
+                                'valid': False,
+                                'reason': 'No todos los números de tu cartilla están marcados',
+                                'timestamp': time.time()
+                            }
+                            await self.broadcast_message({
+                                'type': 'bingo_result',
+                                'valid': False,
+                                'player': nickname,
+                                'reason': 'No todos los números están marcados'
+                            })
+                            await self.broadcast_message({'type': 'game_resumed'})
                 
         except websockets.exceptions.ConnectionClosed:
             pass

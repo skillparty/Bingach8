@@ -439,9 +439,15 @@ class GameState:
         self.number_animation_active = False
         self.number_scale = 1.0
         self.button_hover = None  # Para efecto hover en botones
+        self.buttons = {}  # Rectángulos de botones (se llenan en draw_buttons)
         self.show_confetti = False  # Para animación de confeti al ganar
         self.confetti_particles = []  # Para partículas de confeti
         self.start_time = pygame.time.get_ticks()  # Para cronometrar el juego
+        self.winner_name = None  # Nombre del jugador interactivo que ganó
+        self.last_processed_claim_time = 0  # Timestamp del último reclamo procesado
+        self.temp_notification = None  # Mensaje temporal de notificación
+        self.temp_notification_start = 0  # Inicio de la notificación temporal
+        self.temp_notification_duration = 4000  # Duración de la notificación (4s)
         
         # Inicialización del tablero
         self.initialize_board()
@@ -595,25 +601,133 @@ class Ball:
         except Exception as e:
             print(f"Error reproduciendo audio para el número {self.number}: {e}")
 
+# Helper drawing functions and utilities
+def draw_rounded_rect(surface, color, rect, radius):
+    """Dibuja un rectángulo con esquinas redondeadas, con soporte de alpha"""
+    if len(color) == 4:  # Color con alpha
+        temp_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(temp_surface, color, (0, 0, rect.width, rect.height), border_radius=radius)
+        surface.blit(temp_surface, rect)
+    else:
+        pygame.draw.rect(surface, color, rect, border_radius=radius)
+
+def draw_rounded_rect_outline(surface, color, rect, radius, width):
+    """Dibuja el contorno de un rectángulo con esquinas redondeadas con soporte de alpha"""
+    if len(color) == 4:
+        temp_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        pygame.draw.rect(temp_surface, color, (0, 0, rect.width, rect.height), width, border_radius=radius)
+        surface.blit(temp_surface, rect)
+    else:
+        pygame.draw.rect(surface, color, rect, width, border_radius=radius)
+
+def draw_rounded_gradient_rect(surface, color_start, color_end, rect, radius):
+    """Dibuja un rectángulo redondeado con un gradiente vertical utilizando alpha-blending"""
+    c_start = list(color_start)
+    if len(c_start) == 3: c_start.append(255)
+    c_end = list(color_end)
+    if len(c_end) == 3: c_end.append(255)
+    
+    grad_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+    for y in range(rect.height):
+        ratio = y / rect.height
+        r = int(c_start[0] * (1 - ratio) + c_end[0] * ratio)
+        g = int(c_start[1] * (1 - ratio) + c_end[1] * ratio)
+        b = int(c_start[2] * (1 - ratio) + c_end[2] * ratio)
+        a = int(c_start[3] * (1 - ratio) + c_end[3] * ratio)
+        pygame.draw.line(grad_surf, (r, g, b, a), (0, y), (rect.width, y))
+        
+    mask_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+    pygame.draw.rect(mask_surf, (255, 255, 255, 255), (0, 0, rect.width, rect.height), border_radius=radius)
+    grad_surf.blit(mask_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    surface.blit(grad_surf, rect)
+
+def get_number_gradient(num):
+    """Obtiene los colores de gradiente (inicio, fin) y el color de brillo para un número"""
+    if cfg.TOTAL_NUMBERS == 90:
+        if num <= 30:
+            return (52, 211, 153), (4, 120, 87), (52, 211, 153, 128)
+        elif num <= 60:
+            return (249, 115, 22), (194, 65, 12), (249, 115, 22, 128)
+        else:
+            return (99, 102, 241), (67, 56, 202), (99, 102, 241, 128)
+    else:
+        part = cfg.TOTAL_NUMBERS // 3
+        if num <= part:
+            return (52, 211, 153), (4, 120, 87), (52, 211, 153, 128)
+        elif num <= part * 2:
+            return (249, 115, 22), (194, 65, 12), (249, 115, 22, 128)
+        else:
+            return (99, 102, 241), (67, 56, 202), (99, 102, 241, 128)
+
+def get_number_color_and_glow(num):
+    """Determina el color y brillo de un número según el modo de juego (mantiene compatibilidad)"""
+    if cfg.TOTAL_NUMBERS == 90:
+        if num <= 30:
+            return cfg.RANGE_1_30, (130, 134, 251)
+        elif num <= 60:
+            return cfg.RANGE_31_60, (253, 253, 150)
+        else:
+            return cfg.RANGE_61_90, (255, 0, 110)
+    else:
+        if num <= 25:
+            return cfg.RANGE_1_30, (130, 134, 251)
+        elif num <= 50:
+            return cfg.RANGE_31_60, (253, 253, 150)
+        else:
+            return cfg.RANGE_61_90, (255, 0, 110)
+
+# Caché global para optimizar el dibujado de celdas a 120 FPS
+cell_cache = {
+    "inactive": None,
+    "range_1": None,
+    "range_2": None,
+    "range_3": None,
+    "last_cell_size": 0,
+    "last_corner_radius": 0
+}
+
+def update_cell_cache(cell_size, corner_radius):
+    """Regenera la caché de celdas cuando cambia la resolución o el tamaño"""
+    global cell_cache
+    cell_cache["last_cell_size"] = cell_size
+    cell_cache["last_corner_radius"] = corner_radius
+    
+    # 1. Celda inactiva (Efecto vidrio oscuro/glassmorphic)
+    inactive_surf = pygame.Surface((cell_size, cell_size), pygame.SRCALPHA)
+    draw_rounded_rect(inactive_surf, (15, 23, 42, 160), pygame.Rect(0, 0, cell_size, cell_size), corner_radius)
+    draw_rounded_rect_outline(inactive_surf, (255, 255, 255, 20), pygame.Rect(0, 0, cell_size, cell_size), corner_radius, scale_value(1))
+    cell_cache["inactive"] = inactive_surf
+    
+    # 2. Celdas activas con degradados premium y resalte 3D
+    for name, num_val in [("range_1", 1), ("range_2", 31), ("range_3", 61)]:
+        color_start, color_end, _ = get_number_gradient(num_val)
+        surf = pygame.Surface((cell_size, cell_size), pygame.SRCALPHA)
+        draw_rounded_gradient_rect(surf, color_start, color_end, pygame.Rect(0, 0, cell_size, cell_size), corner_radius)
+        # Resalte de brillo superior sutil (efecto bisel 3D)
+        pygame.draw.line(surf, (255, 255, 255, 75), (corner_radius, 1), (cell_size - corner_radius, 1), 1)
+        # Borde fino semi-transparente blanco para realzar el contraste
+        draw_rounded_rect_outline(surf, (255, 255, 255, 45), pygame.Rect(0, 0, cell_size, cell_size), corner_radius, scale_value(1))
+        cell_cache[name] = surf
+
 def draw_board():
-    """Dibuja el tablero principal del bingo con diseño moderno y profesional."""
+    """Dibuja el tablero principal del bingo con diseño premium, glassmorphism y alto rendimiento."""
     # Obtener configuración adaptativa
     adaptive_config = get_adaptive_config()
     
     # Configuración responsiva del tablero con mejor escalado
-    cell_size = scale_value(adaptive_config["board_cell_size"], min_value=50, max_value=120)  # Aumentado mínimo y máximo
-    cell_spacing = scale_value(int(adaptive_config["board_cell_size"] * 0.12), min_value=5, max_value=18)  # Más espaciado
-    corner_radius = scale_value(10, min_value=6, max_value=20)  # Bordes más redondeados
+    cell_size = scale_value(adaptive_config["board_cell_size"], min_value=50, max_value=120)
+    cell_spacing = scale_value(int(adaptive_config["board_cell_size"] * 0.12), min_value=5, max_value=18)
+    corner_radius = scale_value(10, min_value=6, max_value=20)
     
     # Calcular dimensiones del tablero
     board_width = cfg.BOARD_COLS * cell_size + (cfg.BOARD_COLS - 1) * cell_spacing
     board_height = cfg.BOARD_ROWS * cell_size + (cfg.BOARD_ROWS - 1) * cell_spacing
     
-    # Posicionamiento centrado con margen superior mejorado para evitar superposición
+    # Posicionamiento centrado
     board_x = (cfg.WIDTH - board_width) // 2
-    board_y = scale_value(adaptive_config["board_margin_top"], False, min_value=200, max_value=400)  # Usar margen del config
+    board_y = scale_value(adaptive_config["board_margin_top"], False, min_value=200, max_value=400)
     
-    # Contenedor del tablero con diseño moderno
+    # Contenedor del tablero (Efecto Glassmorphism Premium)
     container_padding = scale_value(20)
     container_rect = pygame.Rect(
         board_x - container_padding,
@@ -622,93 +736,111 @@ def draw_board():
         board_height + container_padding * 2
     )
     
-    # Sombra del contenedor
+    # Sombra difuminada
     shadow_rect = container_rect.copy()
-    shadow_rect.x += scale_value(6)
-    shadow_rect.y += scale_value(6)
-    draw_rounded_rect(screen, (0, 0, 0, 32), shadow_rect, scale_value(12))
+    shadow_rect.x += scale_value(8)
+    shadow_rect.y += scale_value(8)
+    draw_rounded_rect(screen, (0, 0, 0, 80), shadow_rect, scale_value(16))
     
-    # Fondo del contenedor
-    draw_rounded_rect(screen, cfg.FRAME_COLOR, container_rect, scale_value(12))
+    # Fondo de vidrio oscuro semi-transparente
+    draw_rounded_rect(screen, (10, 15, 30, 210), container_rect, scale_value(16))
     
-    # Borde del contenedor
-    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, container_rect, scale_value(12), scale_value(2))
+    # Bordes elegantes del contenedor
+    draw_rounded_rect_outline(screen, (71, 85, 105, 180), container_rect, scale_value(16), scale_value(2))
     
-    # Título del tablero moderno con mejor espaciado
+    # Título del tablero enmarcado con líneas elegantes y sombra de texto
     title_y = container_rect.top - scale_value(70, False, min_value=50, max_value=100)
     title_font = fonts["title_small"]
-    title_text = title_font.render("TABLERO DE NÚMEROS", True, cfg.TEXT_COLOR)
+    
+    title_shadow = title_font.render("TABLERO DE NÚMEROS", True, (0, 0, 0))
+    title_text = title_font.render("TABLERO DE NÚMEROS", True, cfg.WHITE)
     title_rect = title_text.get_rect(center=(container_rect.centerx, title_y))
+    
+    screen.blit(title_shadow, (title_rect.x + 2, title_rect.y + 2))
     screen.blit(title_text, title_rect)
     
-
+    # Líneas decorativas laterales del título
+    line_y = title_rect.centery
+    pygame.draw.line(screen, (71, 85, 105, 120), (container_rect.left + scale_value(30), line_y), (title_rect.left - scale_value(20), line_y), scale_value(2))
+    pygame.draw.line(screen, (71, 85, 105, 120), (title_rect.right + scale_value(20), line_y), (container_rect.right - scale_value(30), line_y), scale_value(2))
     
-    # Dibujar celdas del tablero con diseño moderno
+    # Regenerar caché de celdas si cambia el tamaño
+    if (cell_cache["last_cell_size"] != cell_size or 
+        cell_cache["last_corner_radius"] != corner_radius or
+        cell_cache["inactive"] is None):
+        update_cell_cache(cell_size, corner_radius)
+        
+    # Dibujar celdas del tablero
     for row in range(cfg.BOARD_ROWS):
         for col in range(cfg.BOARD_COLS):
             number = row * cfg.BOARD_COLS + col + 1
             
             if number <= cfg.TOTAL_NUMBERS:
-                # Calcular posición de la celda
                 cell_x = board_x + col * (cell_size + cell_spacing)
                 cell_y = board_y + row * (cell_size + cell_spacing)
                 cell_rect = pygame.Rect(cell_x, cell_y, cell_size, cell_size)
                 
-                # Determinar colores según el rango
-                range_color, glow_color = get_number_color_and_glow(number)
-                
-                # Estado de la celda
                 is_drawn = number in game_state.drawn_numbers
                 is_current = number == game_state.current_number
                 
                 if is_drawn:
-                    # Número ya sorteado - celda activa
                     if is_current:
-                        # Número actual - efecto especial
+                        # EFECTO NEÓN PULSANTE PARA EL NÚMERO ACTUAL
                         current_time = pygame.time.get_ticks()
-                        pulse = 0.8 + 0.2 * math.sin(current_time / 300)
+                        pulse = 0.85 + 0.15 * math.sin(current_time / 150)
                         
-                        # Brillo pulsante alrededor
-                        glow_rect = cell_rect.inflate(scale_value(8), scale_value(8))
-                        glow_alpha = int(120 * pulse)
-                        draw_rounded_rect(screen, (*glow_color[:3], glow_alpha), glow_rect, corner_radius + scale_value(2))
+                        pulse_amt = int(math.sin(current_time / 150) * scale_value(3))
+                        pulsed_rect = cell_rect.inflate(pulse_amt, pulse_amt)
+                        pulsed_radius = corner_radius + int(pulse_amt / 2)
                         
-                        # Fondo con color intenso
-                        draw_rounded_rect(screen, range_color, cell_rect, corner_radius)
+                        _, _, range_glow = get_number_gradient(number)
+                        glow_rect = pulsed_rect.inflate(scale_value(12), scale_value(12))
+                        glow_alpha = int(140 * pulse)
+                        draw_rounded_rect(screen, (*range_glow[:3], glow_alpha), glow_rect, pulsed_radius + scale_value(2))
                         
-                        # Borde brillante
-                        draw_rounded_rect_outline(screen, cfg.HIGHLIGHT_COLOR, cell_rect, corner_radius, scale_value(3))
+                        # Degradado mágico para el número actual (Violeta a Rosa Neón)
+                        draw_rounded_gradient_rect(screen, (236, 72, 153), (124, 58, 237), pulsed_rect, pulsed_radius)
+                        pygame.draw.line(screen, (255, 255, 255, 100), (pulsed_rect.left + pulsed_radius, pulsed_rect.top + 1), (pulsed_rect.right - pulsed_radius, pulsed_rect.top + 1), 1)
+                        draw_rounded_rect_outline(screen, (255, 255, 255, 255), pulsed_rect, pulsed_radius, scale_value(3))
                         
-                        # Texto con color contrastante
-                        text_color = cfg.BLACK if range_color == cfg.ACCENT_COLOR else cfg.TEXT_COLOR
+                        text_color = cfg.WHITE
+                        draw_shadow = True
                     else:
-                        # Número sorteado normal
-                        # Fondo con color del rango
-                        draw_rounded_rect(screen, range_color, cell_rect, corner_radius)
-                        
-                        # Borde sutil
-                        draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, cell_rect, corner_radius, scale_value(1))
-                        
-                        # Texto con color contrastante
-                        text_color = cfg.BLACK if range_color == cfg.ACCENT_COLOR else cfg.TEXT_COLOR
+                        # CELDA SORTEADA NORMAL (Caché)
+                        if cfg.TOTAL_NUMBERS == 90:
+                            if number <= 30:
+                                screen.blit(cell_cache["range_1"], cell_rect)
+                            elif number <= 60:
+                                screen.blit(cell_cache["range_2"], cell_rect)
+                            else:
+                                screen.blit(cell_cache["range_3"], cell_rect)
+                        else:
+                            part = cfg.TOTAL_NUMBERS // 3
+                            if number <= part:
+                                screen.blit(cell_cache["range_1"], cell_rect)
+                            elif number <= part * 2:
+                                screen.blit(cell_cache["range_2"], cell_rect)
+                            else:
+                                screen.blit(cell_cache["range_3"], cell_rect)
+                        text_color = cfg.WHITE
+                        draw_shadow = True
                 else:
-                    # Número no sorteado - celda inactiva
-                    # Fondo neutro
-                    draw_rounded_rect(screen, cfg.DARK_GRAY, cell_rect, corner_radius)
-                    
-                    # Borde sutil
-                    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, cell_rect, corner_radius, scale_value(1))
-                    
-                    # Texto apagado
-                    text_color = cfg.GRAY
+                    # CELDA INACTIVA (Caché)
+                    screen.blit(cell_cache["inactive"], cell_rect)
+                    text_color = (100, 116, 139)  # Slate-500
+                    draw_shadow = False
                 
                 # Renderizar número
                 number_font = fonts["number_medium"]
+                if draw_shadow:
+                    shadow_surface = number_font.render(str(number), True, (0, 0, 0))
+                    shadow_rect = shadow_surface.get_rect(center=(cell_rect.centerx + 1, cell_rect.centery + 1))
+                    screen.blit(shadow_surface, shadow_rect)
+                
                 number_surface = number_font.render(str(number), True, text_color)
                 number_rect = number_surface.get_rect(center=cell_rect.center)
                 screen.blit(number_surface, number_rect)
                 
-                # Tooltip para celdas (solo si el mouse está sobre una celda)
                 mouse_pos = pygame.mouse.get_pos()
                 if cell_rect.collidepoint(mouse_pos):
                     if is_drawn:
@@ -718,50 +850,63 @@ def draw_board():
                             tooltip_text = f"Número {number} - Ya sorteado"
                     else:
                         tooltip_text = f"Número {number} - Pendiente"
-                    
                     game_state.tooltips.set_tooltip(tooltip_text, (cell_rect.centerx, cell_rect.top), delay=500)
-    
-    # Estadísticas del tablero
+                    
+    # Barra de progreso AAA con gradiente y tip brillante
     drawn_count = len(game_state.drawn_numbers)
     remaining_count = cfg.TOTAL_NUMBERS - drawn_count
     progress_percentage = (drawn_count / cfg.TOTAL_NUMBERS) * 100
     
-    # Barra de progreso moderna
-    progress_bar_y = container_rect.bottom + scale_value(15, False)
+    progress_bar_y = container_rect.bottom + scale_value(20, False)
     progress_bar_width = board_width
-    progress_bar_height = scale_value(8, False)
+    progress_bar_height = scale_value(10, False)
     progress_bar_rect = pygame.Rect(board_x, progress_bar_y, progress_bar_width, progress_bar_height)
     
-    # Fondo de la barra de progreso
-    draw_rounded_rect(screen, cfg.DARK_GRAY, progress_bar_rect, scale_value(4))
+    draw_rounded_rect(screen, (15, 23, 42, 180), progress_bar_rect, scale_value(5))
+    draw_rounded_rect_outline(screen, (71, 85, 105, 60), progress_bar_rect, scale_value(5), scale_value(1))
     
-    # Progreso actual
     if drawn_count > 0:
         progress_width = int(progress_bar_width * (drawn_count / cfg.TOTAL_NUMBERS))
         progress_rect = pygame.Rect(board_x, progress_bar_y, progress_width, progress_bar_height)
-        draw_rounded_rect(screen, cfg.PRIMARY_COLOR, progress_rect, scale_value(4))
-    
-    # Texto de estadísticas
-    stats_y = progress_bar_y + scale_value(25, False)
+        draw_rounded_gradient_rect(screen, (34, 211, 238), (99, 102, 241), progress_rect, scale_value(5))
+        
+        # Puntero brillante (Tip cápsula)
+        tip_x = board_x + progress_width
+        tip_rect = pygame.Rect(tip_x - scale_value(3), progress_bar_y - scale_value(2), scale_value(6), progress_bar_height + scale_value(4))
+        draw_rounded_rect(screen, (255, 255, 255, 240), tip_rect, scale_value(3))
+        
+    # Estadísticas en badges modernos
+    stats_y = progress_bar_y + scale_value(32, False)
+    badge_height = scale_value(32, False)
+    badge_padding = scale_value(12)
     stats_font = fonts["number_small"]
     
-    # Números sorteados
+    # 1. Chip "Sorteados"
     drawn_text = f"Sorteados: {drawn_count}"
-    drawn_surface = stats_font.render(drawn_text, True, cfg.TEXT_COLOR)
-    drawn_rect = drawn_surface.get_rect(left=board_x, centery=stats_y)
-    screen.blit(drawn_surface, drawn_rect)
+    drawn_surf = stats_font.render(drawn_text, True, (52, 211, 153))
+    drawn_width = drawn_surf.get_width()
+    drawn_rect = pygame.Rect(board_x, stats_y - badge_height // 2, drawn_width + badge_padding * 2, badge_height)
+    draw_rounded_rect(screen, (16, 185, 129, 30), drawn_rect, scale_value(8))
+    draw_rounded_rect_outline(screen, (16, 185, 129, 80), drawn_rect, scale_value(8), scale_value(1))
+    screen.blit(drawn_surf, (drawn_rect.x + badge_padding, drawn_rect.centery - drawn_surf.get_height() // 2))
     
-    # Porcentaje
-    percentage_text = f"{progress_percentage:.1f}%"
-    percentage_surface = stats_font.render(percentage_text, True, cfg.ACCENT_COLOR)
-    percentage_rect = percentage_surface.get_rect(center=(container_rect.centerx, stats_y))
-    screen.blit(percentage_surface, percentage_rect)
+    # 2. Chip "Progreso"
+    percentage_text = f"Progreso: {progress_percentage:.1f}%"
+    percentage_surf = stats_font.render(percentage_text, True, (251, 191, 36))
+    percentage_width = percentage_surf.get_width()
+    percentage_rect = pygame.Rect(container_rect.centerx - (percentage_width + badge_padding * 2) // 2, stats_y - badge_height // 2, percentage_width + badge_padding * 2, badge_height)
+    draw_rounded_rect(screen, (249, 115, 22, 30), percentage_rect, scale_value(8))
+    draw_rounded_rect_outline(screen, (249, 115, 22, 80), percentage_rect, scale_value(8), scale_value(1))
+    screen.blit(percentage_surf, (percentage_rect.x + badge_padding, percentage_rect.centery - percentage_surf.get_height() // 2))
     
-    # Números restantes
+    # 3. Chip "Restantes"
     remaining_text = f"Restantes: {remaining_count}"
-    remaining_surface = stats_font.render(remaining_text, True, cfg.GRAY)
-    remaining_rect = remaining_surface.get_rect(right=board_x + board_width, centery=stats_y)
-    screen.blit(remaining_surface, remaining_rect)
+    remaining_surf = stats_font.render(remaining_text, True, (148, 163, 184))
+    remaining_width = remaining_surf.get_width()
+    remaining_rect = pygame.Rect(board_x + board_width - (remaining_width + badge_padding * 2), stats_y - badge_height // 2, remaining_width + badge_padding * 2, badge_height)
+    draw_rounded_rect(screen, (148, 163, 184, 30), remaining_rect, scale_value(8))
+    draw_rounded_rect_outline(screen, (148, 163, 184, 80), remaining_rect, scale_value(8), scale_value(1))
+    screen.blit(remaining_surf, (remaining_rect.x + badge_padding, remaining_rect.centery - remaining_surf.get_height() // 2))
 
 def draw_buttons():
     """Dibuja los botones del juego con diseño moderno y profesional."""
@@ -955,8 +1100,21 @@ def draw_current_number():
         shadow_rect.y += scale_value(4)
         draw_rounded_rect(screen, (0, 0, 0, 64), shadow_rect, corner_radius)
         
-        # Fondo del contenedor
-        draw_rounded_rect(screen, cfg.FRAME_COLOR, container_rect, corner_radius)
+        # Fondo de vidrio oscuro semi-transparente
+        draw_rounded_rect(screen, (10, 15, 30, 210), container_rect, corner_radius)
+        
+        # Relleno de degradado sutil con el color del rango del número sorteado
+        range_start, range_end, _ = get_number_gradient(game_state.current_number)
+        draw_rounded_gradient_rect(
+            screen, 
+            (*range_start, 40), 
+            (*range_end, 15), 
+            container_rect, 
+            corner_radius
+        )
+        
+        # Resalte de brillo superior (efecto bisel 3D)
+        pygame.draw.line(screen, (255, 255, 255, 80), (container_rect.left + corner_radius, container_rect.top + 1), (container_rect.right - corner_radius, container_rect.top + 1), 1)
         
         # Borde con color del rango
         draw_rounded_rect_outline(screen, number_color, container_rect, corner_radius, scale_value(2))
@@ -973,8 +1131,12 @@ def draw_current_number():
                          glow_surface_rect, corner_radius + scale_value(2))
         screen.blit(glow_surface, glow_rect)
         
-        # Número principal
+        # Número principal con sombra 3D
         number_font = fonts["number_large"]
+        shadow_text = number_font.render(str(game_state.current_number), True, (0, 0, 0))
+        shadow_rect = shadow_text.get_rect(center=(container_rect.centerx + 3, container_rect.centery - scale_value(8) + 3))
+        screen.blit(shadow_text, shadow_rect)
+        
         number_text = number_font.render(str(game_state.current_number), True, number_color)
         number_rect = number_text.get_rect(center=(container_rect.centerx, container_rect.centery - scale_value(8)))
         screen.blit(number_text, number_rect)
@@ -1067,38 +1229,6 @@ def select_number():
         print(f"Error en select_number: {e}")
         return None
 
-def draw_rounded_rect(surface, color, rect, radius):
-    """Dibuja un rectángulo con esquinas redondeadas"""
-    if len(color) == 4:  # Color con alpha
-        # Crear superficie temporal para alpha blending
-        temp_surface = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-        pygame.draw.rect(temp_surface, color, (0, 0, rect.width, rect.height), border_radius=radius)
-        surface.blit(temp_surface, rect)
-    else:
-        pygame.draw.rect(surface, color, rect, border_radius=radius)
-
-def draw_rounded_rect_outline(surface, color, rect, radius, width):
-    """Dibuja el contorno de un rectángulo con esquinas redondeadas"""
-    pygame.draw.rect(surface, color, rect, width, border_radius=radius)
-
-def get_number_color_and_glow(num):
-    """Determina el color y brillo de un número según el modo de juego"""
-    if cfg.TOTAL_NUMBERS == 90:
-        # Modo normal: rangos 1-30, 31-60, 61-90
-        if num <= 30:
-            return cfg.RANGE_1_30, (130, 134, 251)
-        elif num <= 60:
-            return cfg.RANGE_31_60, (253, 253, 150)
-        else:
-            return cfg.RANGE_61_90, (255, 0, 110)
-    else:
-        # Modo alterno: rangos 1-25, 26-50, 51-75
-        if num <= 25:
-            return cfg.RANGE_1_30, (130, 134, 251)
-        elif num <= 50:
-            return cfg.RANGE_31_60, (253, 253, 150)
-        else:
-            return cfg.RANGE_61_90, (255, 0, 110)
 
 def draw_number_history():
     """Dibuja el historial de números sorteados con diseño moderno tipo cards."""
@@ -1381,13 +1511,15 @@ def draw_bingo_animation():
                 winner_size = int(50 * winner_scale)
                 winner_font = cfg.get_font(winner_size, bold=True)
                 
+                winner_label = f"¡GANADOR: {game_state.winner_name.upper()}!" if game_state.winner_name else "¡GANADOR!"
+                
                 # Texto con sombra
-                winner_shadow = winner_font.render("¡GANADOR!", True, cfg.BLACK)
+                winner_shadow = winner_font.render(winner_label, True, cfg.BLACK)
                 winner_shadow_rect = winner_shadow.get_rect(center=(cfg.WIDTH // 2 + 2, cfg.HEIGHT // 2 + 100 + 2))
                 screen.blit(winner_shadow, winner_shadow_rect)
                 
                 # Texto principal con color amarillo brillante de la nueva paleta
-                winner_text = winner_font.render("¡GANADOR!", True, cfg.ALT_GLOW_COLOR)  # Amarillo
+                winner_text = winner_font.render(winner_label, True, cfg.ALT_GLOW_COLOR)  # Amarillo
                 winner_rect = winner_text.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT // 2 + 100))
                 screen.blit(winner_text, winner_rect)
                 
@@ -1403,54 +1535,205 @@ def draw_bingo_animation():
             game_state.bingo_animation_time = 0
 def draw_timer():
     """Dibuja el temporizador con estilo Las Vegas."""
-    if game_state.game_started and not game_state.game_over:
-        # Calcular tiempo transcurrido
-        current_time = pygame.time.get_ticks()
-        elapsed = (current_time - game_state.start_time) // 1000  # En segundos
-        minutes = elapsed // 60
-        seconds = elapsed % 60
+    if not game_state.game_started or game_state.game_over:
+        return
+    
+    # Calcular tiempo transcurrido
+    current_time = pygame.time.get_ticks()
+    elapsed = (current_time - game_state.start_time) // 1000  # En segundos
+    minutes = elapsed // 60
+    seconds = elapsed % 60
+    
+    # Crear rectángulo para el temporizador - estilo neón, escalado para responsividad
+    timer_width = scale_value(150)
+    timer_height = scale_value(40, False)
+    timer_margin = scale_value(10)
+    
+    timer_rect = pygame.Rect(timer_margin, timer_margin, timer_width, timer_height)
+    
+    # Efecto de borde neón para el temporizador
+    for i in range(3, 0, -1):
+        glow_rect = timer_rect.inflate(i*2, i*2)
+        alpha = int(80 - i * 15)
+        s = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
+        s.fill((37, 99, 235, alpha))  # Azul neón con alpha
+        screen.blit(s, (glow_rect.x, glow_rect.y))
         
-        # Crear rectángulo para el temporizador - estilo neón, escalado para responsividad
-        timer_width = scale_value(150)
-        timer_height = scale_value(40, False)
-        timer_margin = scale_value(10)
+    pygame.draw.rect(screen, cfg.BACKGROUND_DARK, timer_rect)
+    pygame.draw.rect(screen, cfg.PRIMARY_COLOR, timer_rect, 2, border_radius=5)
+    
+    # Texto del temporizador con sombra para estilo neón
+    time_text = font_small.render(f"TIEMPO: {minutes:02d}:{seconds:02d}", True, cfg.WHITE)
+    
+    # Sombra
+    shadow_text = font_small.render(f"TIEMPO: {minutes:02d}:{seconds:02d}", True, cfg.BLACK)
+    shadow_rect = shadow_text.get_rect(center=(timer_rect.center[0]+1, timer_rect.center[1]+1))
+    screen.blit(shadow_text, shadow_rect)
+    
+    # Texto principal
+    text_rect = time_text.get_rect(center=timer_rect.center)
+    screen.blit(time_text, text_rect)
+
+def draw_server_status_card(screen):
+    """Dibuja un panel de estado multijugador premium en el lado izquierdo del tablero."""
+    if not multiplayer_manager.is_server_mode():
+        return
         
-        timer_rect = pygame.Rect(timer_margin, timer_margin, timer_width, timer_height)
+    status = multiplayer_manager.get_connection_status()
+    adaptive_config = get_adaptive_config()
+    
+    # Dimensiones basadas en el contenedor del número actual para alineación perfecta
+    base_size = adaptive_config["current_number_size"]
+    container_width = scale_value(base_size * 1.2, min_value=250, max_value=400)
+    container_x = scale_value(60, min_value=40, max_value=120)
+    
+    # Calcular Y de inicio (debajo del número actual)
+    current_number_height = scale_value(base_size * 0.7, min_value=160, max_value=280)
+    current_number_y = scale_value(25, False, min_value=17, max_value=49)
+    panel_y = current_number_y + current_number_height + scale_value(20, False)
+    
+    panel_height = scale_value(260, False, min_value=200, max_value=320)
+    panel_rect = pygame.Rect(container_x, panel_y, container_width, panel_height)
+    corner_radius = scale_value(12)
+    
+    # Sombra
+    shadow_rect = panel_rect.copy()
+    shadow_rect.x += scale_value(4)
+    shadow_rect.y += scale_value(4)
+    draw_rounded_rect(screen, (0, 0, 0, 64), shadow_rect, corner_radius)
+    
+    # Fondo cristal/superficie
+    draw_rounded_rect(screen, cfg.FRAME_COLOR, panel_rect, corner_radius)
+    # Borde sutil
+    draw_rounded_rect_outline(screen, cfg.BORDER_COLOR, panel_rect, corner_radius, scale_value(2))
+    
+    # Fuentes
+    font_title = cfg.get_font(scale_value(15, min_value=11, max_value=19), bold=True)
+    font_label = cfg.get_font(scale_value(13, min_value=9, max_value=17), bold=True)
+    font_url = cfg.get_font(scale_value(12, min_value=8, max_value=16))
+    font_stats = cfg.get_font(scale_value(13, min_value=9, max_value=16))
+    
+    # 1. Cabecera: Título + Punto indicador de actividad
+    padding_x = scale_value(16)
+    padding_y = scale_value(12, False)
+    
+    # Título
+    title_surface = font_title.render("CONEXIÓN MULTIJUGADOR", True, cfg.WHITE)
+    title_rect = title_surface.get_rect(topleft=(panel_rect.x + padding_x, panel_rect.y + padding_y))
+    screen.blit(title_surface, title_rect)
+    
+    # Punto verde pulsante
+    dot_radius = scale_value(5)
+    dot_center_x = panel_rect.right - padding_x - dot_radius
+    dot_center_y = title_rect.centery
+    
+    current_time = pygame.time.get_ticks()
+    pulse = 0.7 + 0.3 * math.sin(current_time / 250)
+    
+    # Glow verde
+    glow_radius = int(dot_radius * (1.0 + 0.6 * pulse))
+    glow_surface = pygame.Surface((glow_radius * 2, glow_radius * 2), pygame.SRCALPHA)
+    pygame.draw.circle(glow_surface, (*cfg.SECONDARY_COLOR[:3], int(100 * (1 - pulse))), (glow_radius, glow_radius), glow_radius)
+    screen.blit(glow_surface, (dot_center_x - glow_radius, dot_center_y - glow_radius))
+    
+    # Punto verde principal
+    pygame.draw.circle(screen, cfg.SECONDARY_COLOR, (dot_center_x, dot_center_y), dot_radius)
+    
+    # Separador
+    sep_y = title_rect.bottom + scale_value(8, False)
+    pygame.draw.line(screen, cfg.BORDER_COLOR, (panel_rect.x + padding_x, sep_y), (panel_rect.right - padding_x, sep_y), scale_value(1))
+    
+    # 2. Información de conexiones (URLs)
+    local_ip = status.get('ip', 'N/A')
+    web_port = status.get('http_url', '').split(':')[-1].replace('/', '') if 'http_url' in status else '8080'
+    if not web_port.isdigit():
+        web_port = '8080'
+    
+    url_spectator = f"http://{local_ip}:{web_port}"
+    url_player = f"http://{local_ip}:{web_port}/player.html"
+    
+    # Sección Jugador (Cartilla)
+    player_lbl_y = sep_y + scale_value(12, False)
+    player_lbl = font_label.render("📱 CARTILLA (Jugadores):", True, cfg.ACCENT_COLOR)
+    screen.blit(player_lbl, (panel_rect.x + padding_x, player_lbl_y))
+    
+    player_url_y = player_lbl_y + scale_value(16, False)
+    player_url_surf = font_url.render(url_player, True, cfg.WHITE)
+    screen.blit(player_url_surf, (panel_rect.x + padding_x + scale_value(10), player_url_y))
+    
+    # Sección Espectador (Repetidor de Audio)
+    spec_lbl_y = player_url_y + scale_value(22, False)
+    spec_lbl = font_label.render("🔊 AUDIO REPETIDOR (TV/Celular):", True, cfg.PRIMARY_COLOR)
+    screen.blit(spec_lbl, (panel_rect.x + padding_x, spec_lbl_y))
+    
+    spec_url_y = spec_lbl_y + scale_value(16, False)
+    spec_url_surf = font_url.render(url_spectator, True, cfg.WHITE)
+    screen.blit(spec_url_surf, (panel_rect.x + padding_x + scale_value(10), spec_url_y))
+    
+    # Separador inferior
+    sep2_y = spec_url_y + scale_value(22, False)
+    pygame.draw.line(screen, cfg.BORDER_COLOR, (panel_rect.x + padding_x, sep2_y), (panel_rect.right - padding_x, sep2_y), scale_value(1))
+    
+    # 3. Estadísticas de clientes conectados
+    total_clients = status.get('connected_clients', 0)
+    interactive_players = status.get('interactive_players', 0)
+    spectators = max(0, total_clients - interactive_players)
+    
+    stats_y = sep2_y + scale_value(10, False)
+    stats_text = f"Jugadores: {interactive_players}  |  Repetidores: {spectators}"
+    stats_surf = font_stats.render(stats_text, True, cfg.GRAY)
+    stats_rect = stats_surf.get_rect(centerx=panel_rect.centerx, top=stats_y)
+    screen.blit(stats_surf, stats_rect)
+
+def draw_temp_notification(screen):
+    """Dibuja una notificación temporal (por ejemplo, BINGO inválido) en la parte superior."""
+    if not game_state.temp_notification:
+        return
         
-        # Efecto de borde neón para el temporizador
-        for i in range(3, 0, -1):
-            glow_rect = timer_rect.inflate(i*2, i*2)
-            alpha = int(80 - i * 15)
-            s = pygame.Surface((glow_rect.width, glow_rect.height), pygame.SRCALPHA)
-            s.fill((37, 99, 235, alpha))  # Azul neón con alpha
-            screen.blit(s, (glow_rect.x, glow_rect.y))
-            
-        pygame.draw.rect(screen, cfg.BACKGROUND_DARK, timer_rect)
-        pygame.draw.rect(screen, cfg.PRIMARY_COLOR, timer_rect, 2, border_radius=5)
+    current_time = pygame.time.get_ticks()
+    elapsed = current_time - game_state.temp_notification_start
+    
+    if elapsed >= game_state.temp_notification_duration:
+        game_state.temp_notification = None
+        return
         
-        # Texto del temporizador con sombra para estilo neón
-        time_text = font_small.render(f"TIEMPO: {minutes:02d}:{seconds:02d}", True, cfg.WHITE)
+    # Calcular alpha para desvanecimiento suave (fade out en los últimos 500ms)
+    alpha = 255
+    remaining = game_state.temp_notification_duration - elapsed
+    if remaining < 500:
+        alpha = int(255 * (remaining / 500))
         
-        # Sombra
-        shadow_text = font_small.render(f"TIEMPO: {minutes:02d}:{seconds:02d}", True, cfg.BLACK)
-        shadow_rect = shadow_text.get_rect(center=(timer_rect.center[0]+1, timer_rect.center[1]+1))
-        screen.blit(shadow_text, shadow_rect)
-        
-        # Texto principal
-        text_rect = time_text.get_rect(center=timer_rect.center)
-        screen.blit(time_text, text_rect)
-    else:
-        # Botón BINGO deshabilitado con estilo gris opaco
-        pygame.draw.rect(screen, cfg.DISABLED, bingo_button_rect, border_radius=8)
-        
-        # Borde interno más claro
-        inner_rect = bingo_button_rect.inflate(-10, -10)
-        pygame.draw.rect(screen, cfg.FRAME_COLOR, inner_rect, border_radius=6)
-        
-        # Texto del botón deshabilitado
-        bingo_text = font_medium.render("BINGO", True, (180, 180, 180))
-        bingo_text_rect = bingo_text.get_rect(center=bingo_button_rect.center)
-        screen.blit(bingo_text, bingo_text_rect)
+    # Dimensiones de la notificación
+    banner_w = scale_value(650, min_value=400, max_value=900)
+    banner_h = scale_value(60, False, min_value=45, max_value=80)
+    banner_x = cfg.WIDTH // 2 - banner_w // 2
+    banner_y = scale_value(25, False, min_value=15, max_value=45)
+    
+    banner_rect = pygame.Rect(banner_x, banner_y, banner_w, banner_h)
+    corner_radius = scale_value(10)
+    
+    # Crear una superficie para soportar transparencia (alpha blending)
+    surf = pygame.Surface((banner_w, banner_h), pygame.SRCALPHA)
+    
+    # Dibujar fondo rojo semitransparente
+    pygame.draw.rect(surf, (248, 81, 73, int(alpha * 0.95)), (0, 0, banner_w, banner_h), border_radius=corner_radius)
+    # Dibujar borde blanco/rojo brillante
+    pygame.draw.rect(surf, (255, 255, 255, int(alpha * 0.8)), (0, 0, banner_w, banner_h), scale_value(2), border_radius=corner_radius)
+    
+    # Renderizar texto
+    font = cfg.get_font(scale_value(15, min_value=11, max_value=21), bold=True)
+    text_surf = font.render(game_state.temp_notification, True, (255, 255, 255))
+    
+    # Aplicar alpha al texto
+    text_alpha_surf = pygame.Surface(text_surf.get_size(), pygame.SRCALPHA)
+    text_alpha_surf.fill((255, 255, 255, alpha))
+    text_surf.blit(text_alpha_surf, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+    
+    text_rect = text_surf.get_rect(center=(banner_w // 2, banner_h // 2))
+    surf.blit(text_surf, text_rect)
+    
+    # Blit a la pantalla
+    screen.blit(surf, banner_rect)
 
 def reset_game():
     """Reinicia completamente el juego a su estado inicial."""
@@ -1467,6 +1750,9 @@ def reset_game():
     game_state.drawn_numbers.clear()
     game_state.balls.clear()
     game_state.bingo_called = False
+    game_state.winner_name = None
+    game_state.temp_notification = None
+    game_state.temp_notification_start = 0
     
     # Reiniciar animaciones
     game_state.bingo_animation_active = False
@@ -1504,35 +1790,16 @@ def reset_game():
 
 def check_button_click(pos):
     # Comprobar si se ha hecho clic en un botón
-    # Definir rectángulos de botones (deben coincidir con los de draw_buttons)
-    btn_height = scale_value(60, False)
+    # Usar los rectángulos guardados por draw_buttons
+    if not game_state.buttons:
+        return
     
-    # Botones escalados y posicionados proporcionalmente a la pantalla
-    start_btn_width = scale_value(340)
-    side_btn_width = scale_value(140)
-    bottom_margin = scale_value(110, False)
-    
-    start_button_rect = pygame.Rect(
-        cfg.WIDTH // 2 - start_btn_width // 2,
-        cfg.HEIGHT - bottom_margin, 
-        start_btn_width, 
-        btn_height
-    )
-    bingo_button_rect = pygame.Rect(
-        cfg.WIDTH - side_btn_width - scale_value(30), 
-        cfg.HEIGHT - bottom_margin, 
-        side_btn_width, 
-        btn_height
-    )
-    reset_button_rect = pygame.Rect(
-        scale_value(30), 
-        cfg.HEIGHT - bottom_margin, 
-        side_btn_width, 
-        btn_height
-    )
+    start_button_rect = game_state.buttons.get("start")
+    bingo_button_rect = game_state.buttons.get("bingo")
+    reset_button_rect = game_state.buttons.get("reset")
     
     # Comprobar si se hizo clic en el botón INICIAR/SIGUIENTE
-    if start_button_rect.collidepoint(pos):
+    if start_button_rect and start_button_rect.collidepoint(pos):
         if not game_state.game_started:
             # Primera ejecución - iniciar el juego
             game_state.game_started = True
@@ -1552,7 +1819,7 @@ def check_button_click(pos):
                 print(f"Error al seleccionar siguiente número: {e}")
     
     # Comprobar si se hizo clic en el botón BINGO
-    elif bingo_button_rect.collidepoint(pos):
+    elif bingo_button_rect and bingo_button_rect.collidepoint(pos):
             # Llamar "BINGO" - mostrar animación
             # Nota: No hay archivo de sonido bingo.wav, por lo que no intentamos reproducir audio
             game_state.bingo_called = True
@@ -1563,7 +1830,7 @@ def check_button_click(pos):
             game_state.bingo_animation_time = game_state.bingo_animation_duration
                 
     # Comprobar si se hizo clic en el botón REINICIAR
-    elif reset_button_rect.collidepoint(pos):
+    elif reset_button_rect and reset_button_rect.collidepoint(pos):
         # Reiniciar juego (sin sonido ya que no tenemos reset.wav)
         reset_game()
 
@@ -1787,19 +2054,12 @@ while game_state.running:
                 # Comprobar efectos hover en botones
                 mouse_pos = pygame.mouse.get_pos()
                 
-                # Dimensiones de los botones - IDÉNTICAS a las de draw_buttons
-                start_button_rect = pygame.Rect(cfg.WIDTH // 2 - 150, cfg.HEIGHT - 100, 300, 50)
-                bingo_button_rect = pygame.Rect(cfg.WIDTH - 150, cfg.HEIGHT - 100, 120, 50)
-                reset_button_rect = pygame.Rect(30, cfg.HEIGHT - 100, 120, 50)  # Nuevo botón REINICIAR
-                
-                if start_button_rect.collidepoint(mouse_pos):
-                    game_state.button_hover = "start"
-                elif bingo_button_rect.collidepoint(mouse_pos):
-                    game_state.button_hover = "bingo"
-                elif reset_button_rect.collidepoint(mouse_pos):
-                    game_state.button_hover = "reset"
-                else:
-                    game_state.button_hover = None
+                # Usar los rectángulos guardados por draw_buttons
+                game_state.button_hover = None
+                for btn_name, btn_rect in game_state.buttons.items():
+                    if btn_rect.collidepoint(mouse_pos):
+                        game_state.button_hover = btn_name
+                        break
             elif event.type == MOUSEBUTTONDOWN:
                 check_button_click(event.pos)
     
@@ -1842,14 +2102,31 @@ while game_state.running:
                 particle['y'] += particle['velocity_y']
                 particle['x'] += particle['velocity_x']
                 particle['rotation'] += 2
-                
-                # Eliminar partículas fuera de la pantalla
-                if particle['y'] > cfg.HEIGHT:
-                    game_state.confetti_particles.remove(particle)
+            
+            # Eliminar partículas fuera de la pantalla
+            game_state.confetti_particles = [p for p in game_state.confetti_particles if p['y'] <= cfg.HEIGHT]
                     
             # Desactivar confeti cuando ya no hay partículas
             if len(game_state.confetti_particles) == 0:
                 game_state.show_confetti = False
+        
+        # Procesar reclamos de BINGO del servidor multijugador
+        if multiplayer_manager.is_server_mode() and multiplayer_manager.server:
+            claim = multiplayer_manager.server.latest_bingo_claim
+            if claim and claim['timestamp'] > game_state.last_processed_claim_time:
+                game_state.last_processed_claim_time = claim['timestamp']
+                if claim['valid']:
+                    # BINGO válido: Activar victoria en el host
+                    game_state.bingo_called = True
+                    game_state.winner_name = claim['player']
+                    game_state.show_confetti = True
+                    game_state.confetti_particles = create_confetti()
+                    game_state.bingo_animation_start = pygame.time.get_ticks()
+                    game_state.bingo_animation_time = game_state.bingo_animation_duration
+                else:
+                    # BINGO inválido: Mostrar banner rojo temporal
+                    game_state.temp_notification = f"BINGO INVÁLIDO de {claim['player'].upper()}: {claim['reason']}"
+                    game_state.temp_notification_start = pygame.time.get_ticks()
         
         # Las pelotas han sido eliminadas - no es necesario actualizarlas
         pass
@@ -1860,7 +2137,7 @@ while game_state.running:
         title_screen.draw()
     elif game_state.show_mode_selection:
         # Mostrar la pantalla de selección de modo
-        print("🎮 RENDERIZANDO PANTALLA DE SELECCIÓN DE MODO")
+
         mode_selection.draw()
     else:
         # Limpiar la pantalla con el fondo adecuado
@@ -1896,13 +2173,7 @@ while game_state.running:
         
         # Mostrar información del servidor si está en modo servidor
         if multiplayer_manager.is_server_mode():
-            status = multiplayer_manager.get_connection_status()
-            status_font = cfg.get_font(24)
-            # Mostrar la URL web completa para que el usuario sepa dónde conectar
-            web_url = status.get('http_url', f"http://{status['ip']}:8080")
-            server_text = f"Servidor: {status['nickname']} | Web: {web_url} | Clientes: {status['connected_clients']}"
-            status_surface = status_font.render(server_text, True, cfg.PRIMARY_COLOR)
-            screen.blit(status_surface, (50, 50))
+            draw_server_status_card(screen)
         
         # Dibujar los botones con efectos de hover
         draw_buttons()
@@ -1922,12 +2193,10 @@ while game_state.running:
                 screen.blit(rotated, rect)
         
         # Mostrar tiempo transcurrido si el juego está activo
-        if game_state.game_started and not game_state.game_over:
-            elapsed = (current_time - game_state.start_time) // 1000  # En segundos
-            minutes = elapsed // 60
-            seconds = elapsed % 60
-            time_text = font_small.render(f"Tiempo: {minutes:02d}:{seconds:02d}", True, cfg.BLACK)
-            screen.blit(time_text, (10, 10))
+        draw_timer()
+        
+        # Dibujar notificación temporal si existe (ej. BINGO inválido)
+        draw_temp_notification(screen)
     
     # Actualizar tooltips
     if not game_state.show_title_screen:

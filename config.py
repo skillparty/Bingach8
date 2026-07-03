@@ -71,20 +71,20 @@ COLORS = {
     'SURFACE': (22, 27, 34),          # GitHub Dark Surface #161B22
     'SURFACE_ELEVATED': (33, 38, 45), # Superficie elevada #21262D
     
-    # Colores primarios - Azul profesional
-    'PRIMARY': (88, 166, 255),        # Azul GitHub #58A6FF
-    'PRIMARY_HOVER': (116, 184, 255), # Azul hover #74B8FF
-    'PRIMARY_DARK': (56, 139, 253),   # Azul oscuro #388BFD
+    # Colores primarios - Indigo moderno
+    'PRIMARY': (99, 102, 241),        # Indigo moderno #6366F1
+    'PRIMARY_HOVER': (129, 140, 248), # Indigo hover #818CF8
+    'PRIMARY_DARK': (79, 70, 229),    # Indigo oscuro #4F46E5
     
-    # Colores secundarios - Verde éxito
-    'SUCCESS': (63, 185, 80),         # Verde GitHub #3FB950
-    'SUCCESS_HOVER': (82, 196, 94),   # Verde hover #52C45E
-    'SUCCESS_MUTED': (46, 160, 67),   # Verde apagado #2EA043
+    # Colores secundarios - Verde éxito/Esmeralda moderno
+    'SUCCESS': (16, 185, 129),         # Esmeralda moderno #10B981
+    'SUCCESS_HOVER': (52, 211, 153),   # Esmeralda hover #34D399
+    'SUCCESS_MUTED': (4, 120, 87),     # Esmeralda oscuro #047857
     
-    # Colores de acento - Naranja/Ámbar
-    'ACCENT': (255, 184, 0),          # Ámbar profesional #FFB800
-    'ACCENT_HOVER': (255, 196, 37),   # Ámbar hover #FFC425
-    'WARNING': (255, 149, 0),         # Naranja advertencia #FF9500
+    # Colores de acento - Naranja moderno
+    'ACCENT': (249, 115, 22),          # Naranja moderno #F97316
+    'ACCENT_HOVER': (251, 146, 60),   # Naranja hover #FB923C
+    'WARNING': (249, 115, 22),         # Naranja advertencia #F97316
     
     # Colores de error/peligro
     'DANGER': (248, 81, 73),          # Rojo GitHub #F85149
@@ -178,8 +178,7 @@ BLUE = (59, 130, 246)
 YELLOW = (250, 204, 21)
 PURPLE = (147, 51, 234)
 ORANGE = (249, 115, 22)
-COLORS = [RED, GREEN, BLUE, YELLOW, PURPLE, ORANGE]
-BACKGROUND_COLOR = (30, 30, 80)  # Fondo azul oscuro
+LEGACY_COLORS = [RED, GREEN, BLUE, YELLOW, PURPLE, ORANGE]
 
 # Configuración de tipografía
 FONTS = {

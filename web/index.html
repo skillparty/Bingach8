@@ -3,128 +3,695 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bingacho - Espectador</title>
+    <title>Bingacho - Espectador Premium</title>
+    <!-- Cargar Fuentes Premium -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
     <style>
-        body {
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(22, 30, 49, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f8f8f2;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            
+            --success-start: #10b981;
+            --success-end: #047857;
+            --accent-start: #f97316;
+            --accent-end: #c2410c;
+            --primary-start: #6366f1;
+            --primary-end: #4338ca;
+            --current-start: #ec4899;
+            --current-end: #7c3ded;
+        }
+
+        * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
-            background-color: #1a1a1a;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
         }
-        #stream-container {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-        }
-        #stream-image {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-        #overlay {
-            position: absolute;
+
+        /* Fondo Animado Neon */
+        .neon-bg {
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
+            z-index: -1;
+            background: 
+                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(236, 72, 153, 0.05) 0%, transparent 40%),
+                #090d16;
+        }
+
+        /* Cabecera Principal */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 10;
+        }
+
+        .logo-section h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-section p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #6e7681;
+            box-shadow: 0 0 8px #6e7681;
+            transition: all 0.3s ease;
+        }
+
+        .status-dot.connected {
+            background-color: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+
+        .status-dot.connecting {
+            background-color: #f97316;
+            box-shadow: 0 0 10px #f97316;
+            animation: pulse 1s infinite alternate;
+        }
+
+        /* Contenido Principal */
+        main {
+            display: grid;
+            grid-template-columns: 320px 1fr 340px;
+            gap: 24px;
+            padding: 24px;
+            flex-grow: 1;
+            max-width: 1800px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        @media (max-width: 1200px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Paneles */
+        .panel {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 10px;
+        }
+
+        /* PANEL IZQUIERDO: Número Actual y Stats */
+        .current-number-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex-grow: 1;
+            min-height: 250px;
+        }
+
+        .current-number-badge {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--current-start), var(--current-end));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 5.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            box-shadow: 0 0 40px rgba(236, 72, 153, 0.25);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            text-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            animation: pulse-ring 2s infinite;
+            transition: all 0.3s ease;
+        }
+
+        .current-number-badge.empty {
+            background: rgba(255, 255, 255, 0.02);
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            box-shadow: none;
+            font-size: 2.5rem;
+            color: var(--text-muted);
+            animation: none;
+        }
+
+        .current-label {
+            margin-top: 16px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+        }
+
+        .stats-list {
+            margin-top: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            background: rgba(255,255,255,0.02);
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.03);
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* PANEL CENTRAL: El Tablero de Números */
+        .board-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 10px;
+            flex-grow: 1;
+        }
+
+        .board-grid.alt-mode {
+            grid-template-columns: repeat(11, 1fr);
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            user-select: none;
+            position: relative;
+        }
+
+        /* Celdas Sorteadas */
+        .cell.drawn {
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .cell.drawn::before {
+            content: '';
+            position: absolute;
+            top: 1px;
+            left: 10%;
+            width: 80%;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+        }
+
+        .cell.range-1 {
+            background: linear-gradient(135deg, var(--success-start), var(--success-end));
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.15);
+        }
+
+        .cell.range-2 {
+            background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+            box-shadow: 0 0 15px rgba(249, 115, 22, 0.15);
+        }
+
+        .cell.range-3 {
+            background: linear-gradient(135deg, var(--primary-start), var(--primary-end));
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.15);
+        }
+
+        .cell.current {
+            background: linear-gradient(135deg, var(--current-start), var(--current-end)) !important;
+            border-color: #fff !important;
+            box-shadow: 0 0 25px var(--current-start) !important;
+            color: #fff !important;
+            transform: scale(1.1);
+            z-index: 2;
+            animation: bounce 0.5s ease;
+        }
+
+        /* PANEL DERECHO: Historial Cronológico */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+            flex-grow: 1;
+            max-height: calc(100vh - 250px);
+            padding-right: 4px;
+        }
+
+        /* Scrollbar Personalizada */
+        .history-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .history-list::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.01);
+        }
+        .history-list::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.08);
+            border-radius: 10px;
+        }
+
+        .history-card {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            padding: 10px 16px;
+            transition: all 0.2s ease;
+        }
+
+        .history-card.latest {
+            background: rgba(236, 72, 153, 0.08);
+            border-color: rgba(236, 72, 153, 0.25);
+            animation: slide-in 0.3s ease-out;
+        }
+
+        .history-index {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            width: 32px;
+        }
+
+        .history-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-left: 8px;
+            width: 40px;
+        }
+
+        .history-tag {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 500;
+            margin-left: auto;
+        }
+
+        .history-tag.range-1 { color: #52d399; background: rgba(16, 185, 129, 0.1); }
+        .history-tag.range-2 { color: #fb923c; background: rgba(249, 115, 22, 0.1); }
+        .history-tag.range-3 { color: #818cf8; background: rgba(99, 102, 241, 0.1); }
+        .history-tag.current { color: #f472b6; background: rgba(236, 72, 153, 0.15); border: 1px solid rgba(236,72,153,0.3); }
+
+        /* Barra de Progreso Inferior */
+        .progress-container {
+            margin-top: 20px;
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 12px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #34d399, #6366f1);
+            width: 0%;
+            border-radius: 10px;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .progress-bar-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 8px;
+            height: 100%;
+            background: #fff;
+            box-shadow: 0 0 10px #fff;
+        }
+
+        /* Overlay de Conexión Inicial */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(9, 13, 22, 0.95);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 10;
+            z-index: 100;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
         }
-        button {
-            padding: 15px 30px;
-            font-size: 1.2rem;
-            background-color: #e91e63;
+
+        .overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .overlay-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 40px;
+            border-radius: 24px;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            backdrop-filter: blur(16px);
+        }
+
+        .overlay-card h2 {
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #6366f1, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .overlay-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+        }
+
+        .overlay-btn {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
             color: white;
             border: none;
+            padding: 16px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
             border-radius: 50px;
             cursor: pointer;
-            transition: transform 0.2s, background-color 0.2s;
-            box-shadow: 0 4px 15px rgba(233, 30, 99, 0.4);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+            transition: all 0.2s ease;
         }
-        button:hover {
-            background-color: #c2185b;
-            transform: scale(1.05);
+
+        .overlay-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(99, 102, 241, 0.50);
         }
-        #status {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 0.8rem;
-            pointer-events: none;
-            z-index: 20;
+
+        /* Overlay de Celebración BINGO */
+        .bingo-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 15, 25, 0.96);
+            z-index: 150;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.5s ease;
         }
-        #fullscreen-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            color: white;
-            border: 1px solid rgba(255,255,255,0.3);
-            padding: 8px 12px;
-            border-radius: 5px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            z-index: 20;
-            transition: background-color 0.2s;
+
+        .bingo-overlay.active {
+            opacity: 1;
+            visibility: visible;
         }
-        #fullscreen-btn:hover {
-            background-color: rgba(0, 0, 0, 0.8);
+
+        .bingo-content {
+            text-align: center;
+            max-width: 600px;
+            width: 90%;
+            transform: scale(0.7);
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        .hidden {
-            display: none !important;
+
+        .bingo-overlay.active .bingo-content {
+            transform: scale(1);
+        }
+
+        .bingo-title {
+            font-size: 6rem;
+            font-weight: 900;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg, #ec4899, #f59e0b, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: wave-text 2s infinite linear;
+            margin-bottom: 10px;
+            text-shadow: 0 0 30px rgba(236, 72, 153, 0.3);
+        }
+
+        .bingo-winner {
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 24px;
+        }
+
+        .bingo-msg {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        .voice-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Animaciones */
+        @keyframes pulse {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.4); }
+            70% { box-shadow: 0 0 0 20px rgba(236, 72, 153, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: scale(1.1); }
+            50% { transform: scale(1.25); }
+        }
+
+        @keyframes slide-in {
+            from { transform: translateX(30px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes wave-text {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
         }
     </style>
 </head>
 <body>
-    <div id="stream-container">
-        <img id="stream-image" src="" alt="Esperando transmisión...">
-        <div id="status">Desconectado</div>
-        <button id="fullscreen-btn" class="hidden">⛶ Pantalla Completa</button>
-        <div id="debug-info" style="position: absolute; bottom: 10px; left: 10px; font-size: 10px; color: rgba(255,255,255,0.5);"></div>
+    <div class="neon-bg"></div>
+
+    <!-- Cabecera -->
+    <header>
+        <div class="logo-section">
+            <h1>BINGACHO</h1>
+            <p id="spectator-mode-lbl">Espectador en Tiempo Real</p>
+        </div>
+        <div class="status-badge">
+            <div id="status-dot" class="status-dot"></div>
+            <span id="status-text">Desconectado</span>
+        </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main>
+        <!-- Panel Izquierdo: Info & Stats -->
+        <div class="panel">
+            <div class="panel-title">🎯 Número Actual</div>
+            <div class="current-number-container">
+                <div id="current-number-badge" class="current-number-badge empty">--</div>
+                <div id="current-label" class="current-label">ESPERANDO</div>
+            </div>
+            
+            <div class="stats-list">
+                <div class="stat-item">
+                    <span>Sorteados:</span>
+                    <span id="stat-drawn" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Restantes:</span>
+                    <span id="stat-remaining" class="stat-value">--</span>
+                </div>
+                <div class="stat-item">
+                    <span>Completado:</span>
+                    <span id="stat-percent" class="stat-value">0%</span>
+                </div>
+                <div class="stat-item">
+                    <span>Jugadores:</span>
+                    <span id="stat-players" class="stat-value">0</span>
+                </div>
+            </div>
+
+            <!-- Control de Audio -->
+            <div class="voice-controls">
+                <input type="checkbox" id="voice-enable" checked>
+                <label for="voice-enable">🔊 Cantar números en español</label>
+            </div>
+        </div>
+
+        <!-- Panel Central: Tablero -->
+        <div class="panel" style="padding: 30px;">
+            <div class="panel-title" style="margin-bottom: 30px;">📊 Panel General de Números</div>
+            <div id="board-grid" class="board-grid">
+                <!-- Se poblará dinámicamente mediante JS -->
+            </div>
+            
+            <div class="progress-container">
+                <div class="progress-bar-bg">
+                    <div id="progress-bar" class="progress-bar-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: Historial -->
+        <div class="panel">
+            <div class="panel-title">📋 Historial de Sorteo</div>
+            <div id="history-list" class="history-list">
+                <!-- Se poblará dinámicamente -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Overlay de Conexión Inicial -->
+    <div id="connect-overlay" class="overlay">
+        <div class="overlay-card">
+            <h2>Espectador de Bingacho</h2>
+            <p>Conéctate para visualizar el sorteo del bingo en tiempo real con estadísticas y síntesis de voz.</p>
+            <button id="connect-btn" class="overlay-btn">Unirse a la Partida</button>
+            <p id="connection-details" style="font-size: 0.8rem; margin-top: 15px;"></p>
+        </div>
     </div>
 
-    <div id="overlay">
-        <h1>Bingacho Espectador</h1>
-        <p>Toca para conectar y habilitar audio</p>
-        <button id="connect-btn">Conectar</button>
-        <p id="connection-details" style="font-size: 0.8rem; margin-top: 10px; color: #aaa;"></p>
+    <!-- Overlay de Celebración BINGO -->
+    <div id="bingo-overlay" class="bingo-overlay">
+        <div class="bingo-content">
+            <div class="bingo-title">¡BINGO!</div>
+            <div id="winner-name" class="bingo-winner">Jugador</div>
+            <div class="bingo-msg">¡La cartilla del ganador ha sido verificada con éxito!</div>
+            <button id="resume-btn" class="overlay-btn" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); box-shadow: none;">Volver al Tablero</button>
+        </div>
     </div>
 
     <script>
         const connectBtn = document.getElementById('connect-btn');
-        const overlay = document.getElementById('overlay');
-        const streamImage = document.getElementById('stream-image');
-        const statusDiv = document.getElementById('status');
-        const debugInfo = document.getElementById('debug-info');
-        const connectionDetails = document.getElementById('connection-details');
-        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const connectOverlay = document.getElementById('connect-overlay');
+        const bingoOverlay = document.getElementById('bingo-overlay');
+        const resumeBtn = document.getElementById('resume-btn');
+        
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        
+        const currentBadge = document.getElementById('current-number-badge');
+        const currentLbl = document.getElementById('current-label');
+        
+        const statDrawn = document.getElementById('stat-drawn');
+        const statRemaining = document.getElementById('stat-remaining');
+        const statPercent = document.getElementById('stat-percent');
+        const statPlayers = document.getElementById('stat-players');
+        const voiceEnable = document.getElementById('voice-enable');
+        
+        const boardGrid = document.getElementById('board-grid');
+        const progressBar = document.getElementById('progress-bar');
+        const historyList = document.getElementById('history-list');
+        const winnerName = document.getElementById('winner-name');
         
         let ws = null;
         let reconnectInterval = null;
-
-        // Obtener IP del host de la URL actual
+        let gameMode = 90;
+        let drawnNumbers = [];
+        let currentNumber = null;
+        
+        // Obtener dirección del servidor
         const host = window.location.hostname;
-        let wsPort = 8765; // Puerto por defecto
+        let wsPort = 8765;
         let wsUrl = `ws://${host}:${wsPort}`;
         
-        // Función para obtener la configuración del servidor
         async function fetchConfig() {
             try {
                 const response = await fetch('/config.json');
@@ -133,37 +700,25 @@
                     if (config.ws_port) {
                         wsPort = config.ws_port;
                         wsUrl = `ws://${host}:${wsPort}`;
-                        console.log("Configuración cargada. Puerto WS:", wsPort);
+                        console.log("Configuración cargada. WebSocket URL:", wsUrl);
                     }
                 }
             } catch (e) {
-                console.error("Error cargando config:", e);
+                console.error("No se pudo cargar la configuración de red. Usando puerto predeterminado:", wsPort);
             }
-            
-            // Actualizar UI
-            connectionDetails.textContent = `Servidor en: ${wsUrl}`;
-            debugInfo.textContent = `WS: ${wsUrl}`;
+            document.getElementById('connection-details').textContent = `Servidor en: ${wsUrl}`;
         }
-
-        // Cargar configuración al iniciar
+        
         fetchConfig();
 
         connectBtn.addEventListener('click', () => {
+            connectOverlay.classList.add('hidden');
             startConnection();
-            // Intentar reproducir un audio silencioso para desbloquear el contexto de audio
             unlockAudio();
         });
 
-        fullscreenBtn.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => {
-                    console.log(`Error al entrar en pantalla completa: ${err.message}`);
-                });
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                }
-            }
+        resumeBtn.addEventListener('click', () => {
+            bingoOverlay.classList.remove('active');
         });
 
         function unlockAudio() {
@@ -177,22 +732,34 @@
             }
         }
 
+        function speakNumber(number) {
+            if (voiceEnable.checked && 'speechSynthesis' in window) {
+                // Cancelar voces anteriores para no encimarse
+                window.speechSynthesis.cancel();
+                
+                const utterance = new SpeechSynthesisUtterance(number.toString());
+                utterance.lang = 'es-ES';
+                utterance.rate = 0.9; // Ligeramente pausado para sonar natural
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
         function startConnection() {
-            overlay.classList.add('hidden');
-            statusDiv.textContent = "Conectando...";
+            statusDot.className = "status-dot connecting";
+            statusText.textContent = "Conectando...";
             
             ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
-                console.log("Conectado al servidor");
-                statusDiv.textContent = "Conectado";
-                statusDiv.style.color = "#4caf50";
-                fullscreenBtn.classList.remove('hidden');
+                console.log("WebSocket conectado");
+                statusDot.className = "status-dot connected";
+                statusText.textContent = "Conectado";
+                statusText.style.color = "#10b981";
                 
                 // Registrarse como espectador
                 ws.send(JSON.stringify({
                     type: "register",
-                    nickname: "MobileSpectator",
+                    nickname: "SpectatorHUD",
                     role: "spectator"
                 }));
             };
@@ -207,13 +774,18 @@
             };
 
             ws.onclose = (event) => {
-                console.log("Desconectado", event);
-                statusDiv.textContent = `Desconectado (Código: ${event.code}) - Reintentando...`;
-                statusDiv.style.color = "#f44336";
-                fullscreenBtn.classList.add('hidden');
+                console.log("WebSocket desconectado");
+                statusDot.className = "status-dot";
+                statusText.textContent = "Desconectado";
+                statusText.style.color = "#6e7681";
                 ws = null;
                 
-                // Reintentar conexión en 3 segundos
+                // Limpiar estados
+                currentBadge.textContent = "--";
+                currentBadge.className = "current-number-badge empty";
+                currentLbl.textContent = "DESCONECTADO";
+                
+                // Intentar reconexión en 3 segundos
                 if (!reconnectInterval) {
                     reconnectInterval = setTimeout(() => {
                         reconnectInterval = null;
@@ -223,33 +795,194 @@
             };
 
             ws.onerror = (err) => {
-                console.error("Error WS:", err);
-                statusDiv.textContent = "Error de conexión";
+                console.error("Error de conexión WebSocket:", err);
                 ws.close();
             };
         }
 
+        function buildBoard(totalNumbers) {
+            gameMode = totalNumbers;
+            boardGrid.innerHTML = '';
+            
+            if (totalNumbers === 90) {
+                boardGrid.className = "board-grid";
+            } else {
+                boardGrid.className = "board-grid alt-mode";
+            }
+            
+            for (let i = 1; i <= totalNumbers; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = `cell-${i}`;
+                cell.textContent = i;
+                boardGrid.appendChild(cell);
+            }
+        }
+
         function handleMessage(msg) {
-            if (msg.type === 'spectator_frame') {
-                if (msg.data) {
-                    // Soporte para JPG y PNG
-                    const fmt = msg.format === 'jpg' ? 'jpeg' : 'png';
-                    streamImage.src = `data:image/${fmt};base64,${msg.data}`;
+            console.log("Mensaje recibido:", msg.type, msg);
+            
+            if (msg.type === 'game_state') {
+                if (gameMode !== msg.game_mode || boardGrid.children.length === 0) {
+                    buildBoard(msg.game_mode);
                 }
-            } else if (msg.type === 'spectator_audio') {
-                if (msg.format === 'wav' && msg.data) {
-                    playAudio(msg.data);
+                
+                drawnNumbers = msg.drawn_numbers || [];
+                currentNumber = msg.current_number;
+                statPlayers.textContent = msg.total_players || 0;
+                
+                updateUI();
+            }
+            else if (msg.type === 'new_number') {
+                currentNumber = msg.number;
+                drawnNumbers = msg.drawn_numbers || [];
+                
+                // Cantar el número por voz
+                speakNumber(currentNumber);
+                
+                updateUI();
+                
+                // Animación de destello neón en la celda
+                const cell = document.getElementById(`cell-${currentNumber}`);
+                if (cell) {
+                    cell.classList.add('current');
+                }
+            }
+            else if (msg.type === 'game_reset') {
+                drawnNumbers = [];
+                currentNumber = null;
+                updateUI();
+                bingoOverlay.classList.remove('active');
+            }
+            else if (msg.type === 'player_joined' || msg.type === 'player_left') {
+                statPlayers.textContent = msg.total_players || 0;
+            }
+            else if (msg.type === 'game_paused') {
+                if (msg.reason === 'bingo_claim') {
+                    currentLbl.textContent = "VERIFICANDO BINGO";
+                    currentBadge.className = "current-number-badge empty";
+                }
+            }
+            else if (msg.type === 'bingo_result') {
+                if (msg.valid) {
+                    winnerName.textContent = msg.player.toUpperCase();
+                    bingoOverlay.classList.add('active');
+                } else {
+                    alert(`¡BINGO INVÁLIDO de ${msg.player}! Razón: ${msg.reason}`);
+                }
+            }
+            else if (msg.type === 'game_resumed') {
+                // Volver a mostrar el número actual anterior
+                if (currentNumber) {
+                    currentBadge.textContent = currentNumber;
+                    currentBadge.className = getBadgeClassForNumber(currentNumber);
+                    currentLbl.textContent = "ACTUAL";
                 }
             }
         }
 
-        function playAudio(base64Data) {
-            try {
-                const audio = new Audio(`data:audio/wav;base64,${base64Data}`);
-                audio.play().catch(e => console.error("Error reproduciendo audio:", e));
-            } catch (e) {
-                console.error("Error creando audio:", e);
+        function getRangeIndex(num) {
+            if (gameMode === 90) {
+                if (num <= 30) return 1;
+                if (num <= 60) return 2;
+                return 3;
+            } else {
+                const part = Math.floor(gameMode / 3);
+                if (num <= part) return 1;
+                if (num <= part * 2) return 2;
+                return 3;
             }
+        }
+
+        function getBadgeClassForNumber(num) {
+            const range = getRangeIndex(num);
+            return `current-number-badge cell drawn range-${range}`;
+        }
+
+        function updateUI() {
+            // 1. Limpiar todas las clases especiales de las celdas del tablero
+            for (let i = 1; i <= gameMode; i++) {
+                const cell = document.getElementById(`cell-${i}`);
+                if (cell) {
+                    cell.className = 'cell';
+                }
+            }
+            
+            // 2. Marcar las celdas sorteadas
+            drawnNumbers.forEach(num => {
+                const cell = document.getElementById(`cell-${num}`);
+                if (cell) {
+                    const range = getRangeIndex(num);
+                    cell.classList.add('drawn', `range-${range}`);
+                }
+            });
+            
+            // 3. Destacar el número actual
+            if (currentNumber) {
+                currentBadge.textContent = currentNumber;
+                currentBadge.className = getBadgeClassForNumber(currentNumber);
+                currentLbl.textContent = "ACTUAL";
+                
+                const currentCell = document.getElementById(`cell-${currentNumber}`);
+                if (currentCell) {
+                    currentCell.classList.add('current');
+                }
+            } else {
+                currentBadge.textContent = "--";
+                currentBadge.className = "current-number-badge empty";
+                currentLbl.textContent = "ESPERANDO";
+            }
+            
+            // 4. Actualizar estadísticas
+            const count = drawnNumbers.length;
+            const remaining = gameMode - count;
+            const pct = ((count / gameMode) * 100).toFixed(1);
+            
+            statDrawn.textContent = count;
+            statRemaining.textContent = remaining;
+            statPercent.textContent = `${pct}%`;
+            
+            // Barra de progreso
+            progressBar.style.width = `${pct}%`;
+            
+            // 5. Historial en orden inverso (más reciente arriba)
+            historyList.innerHTML = '';
+            
+            // Clonamos el array del historial para no modificar el original
+            const chronological = [...drawnNumbers].reverse();
+            
+            chronological.forEach((num, index) => {
+                const totalIndex = drawnNumbers.length - index;
+                const range = getRangeIndex(num);
+                const isCurrentNum = num === currentNumber;
+                
+                const card = document.createElement('div');
+                card.className = `history-card ${index === 0 ? 'latest' : ''}`;
+                
+                const idxSpan = document.createElement('span');
+                idxSpan.className = 'history-index';
+                idxSpan.textContent = `#${totalIndex}`;
+                
+                const numSpan = document.createElement('span');
+                numSpan.className = 'history-number';
+                numSpan.textContent = num;
+                
+                const tagSpan = document.createElement('span');
+                if (isCurrentNum) {
+                    tagSpan.className = 'history-tag current';
+                    tagSpan.textContent = 'ACTUAL';
+                } else {
+                    tagSpan.className = `history-tag range-${range}`;
+                    tagSpan.textContent = gameMode === 90 
+                        ? (range === 1 ? '1-30' : range === 2 ? '31-60' : '61-90')
+                        : (range === 1 ? '1-25' : range === 2 ? '26-50' : '51-75');
+                }
+                
+                card.appendChild(idxSpan);
+                card.appendChild(numSpan);
+                card.appendChild(tagSpan);
+                historyList.appendChild(card);
+            });
         }
     </script>
 </body>

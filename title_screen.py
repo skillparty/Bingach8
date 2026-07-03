@@ -240,11 +240,15 @@ class TitleScreen:
         self.screen = screen
         self.clock = pygame.time.Clock()
         
-        # Fuentes modernas con JetBrains Mono
-        self.font_title = cfg.get_font(cfg.FONTS['SIZES']['TITLE'], bold=True)
-        self.font_subtitle = cfg.get_font(cfg.FONTS['SIZES']['SUBTITLE'])
-        self.font_button = cfg.get_font(cfg.FONTS['SIZES']['BODY'], bold=True)
-        self.font_small = cfg.get_font(cfg.FONTS['SIZES']['SMALL'])
+        # Factores de escala
+        self.scale_x = cfg.WIDTH / 1024
+        self.scale_y = cfg.HEIGHT / 768
+        
+        # Fuentes modernas con JetBrains Mono escaladas
+        self.font_title = cfg.get_font(self.scale_val(cfg.FONTS['SIZES']['TITLE']), bold=True)
+        self.font_subtitle = cfg.get_font(self.scale_val(cfg.FONTS['SIZES']['SUBTITLE']))
+        self.font_button = cfg.get_font(self.scale_val(cfg.FONTS['SIZES']['BODY']), bold=True)
+        self.font_small = cfg.get_font(self.scale_val(cfg.FONTS['SIZES']['SMALL']))
         
         # Configurar fondo binario más visible
         binary_config = BinaryBackgroundConfig(
@@ -285,40 +289,47 @@ class TitleScreen:
         # Estado de animación para compatibilidad
         self.animation_started = False
         
-    def start_animation(self):
-        """Inicia la animación (compatibilidad con main.py)"""
-        self.animation_started = True
-        self.animation_time = 0
+    def scale_val(self, val, is_horizontal=True, min_val=None, max_val=None):
+        """Escala valores en base a la resolución actual"""
+        if is_horizontal:
+            scaled = int(val * self.scale_x)
+        else:
+            scaled = int(val * self.scale_y)
+        if min_val is not None:
+            scaled = max(scaled, min_val)
+        if max_val is not None:
+            scaled = min(scaled, max_val)
+        return scaled
         
     def setup_buttons(self):
-        """Configura los botones del menú"""
-        button_width = 350
-        button_height = 70
+        """Configura los botones del menú con escalado dinámico"""
+        button_width = self.scale_val(350)
+        button_height = self.scale_val(70, False)
         
         # Botón principal de inicio
         self.start_button_rect = pygame.Rect(0, 0, button_width, button_height)
-        self.start_button_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT - 200)
+        self.start_button_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT - self.scale_val(200, False))
         self.start_button_hover = False
         
         # Botones de modo de juego
-        game_button_width = 400
-        game_button_height = 80
+        game_button_width = self.scale_val(400)
+        game_button_height = self.scale_val(80, False)
         
         # Botón juego normal
         self.normal_game_rect = pygame.Rect(0, 0, game_button_width, game_button_height)
-        self.normal_game_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + 100)
+        self.normal_game_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + self.scale_val(100, False))
         self.normal_game_hover = False
         
         # Botón juego alterno
         self.alt_game_rect = pygame.Rect(0, 0, game_button_width, game_button_height)
-        self.alt_game_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + 200)
+        self.alt_game_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + self.scale_val(200, False))
         self.alt_game_hover = False
         
         # Botón volver
-        back_button_width = 200
-        back_button_height = 50
+        back_button_width = self.scale_val(200)
+        back_button_height = self.scale_val(50, False)
         self.back_button_rect = pygame.Rect(0, 0, back_button_width, back_button_height)
-        self.back_button_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + 320)
+        self.back_button_rect.center = (cfg.WIDTH // 2, cfg.HEIGHT // 2 + self.scale_val(320, False))
         self.back_button_hover = False
         
     def update(self):
@@ -431,7 +442,7 @@ class TitleScreen:
     
     def draw_title(self):
         """Dibuja el título con animación letra por letra"""
-        title_y = cfg.HEIGHT // 2 - 100
+        title_y = cfg.HEIGHT // 2 - self.scale_val(100, False)
         
         # Mostrar solo las letras visibles
         visible_text = self.title_letters[:self.visible_letters]
@@ -440,7 +451,7 @@ class TitleScreen:
             # Efecto de brillo
             for i in range(5, 0, -1):
                 glow_alpha = int(30 * self.glow_intensity / i)
-                glow_surface = pygame.Surface((cfg.WIDTH, 200), pygame.SRCALPHA)
+                glow_surface = pygame.Surface((cfg.WIDTH, self.scale_val(200, False)), pygame.SRCALPHA)
                 
                 glow_text = self.font_title.render(visible_text, True, 
                                                  (*cfg.HIGHLIGHT_COLOR[:3], glow_alpha))
@@ -450,7 +461,7 @@ class TitleScreen:
             
             # Sombra
             shadow_text = self.font_title.render(visible_text, True, (0, 0, 0))
-            shadow_rect = shadow_text.get_rect(center=(cfg.WIDTH // 2 + 3, title_y + 3))
+            shadow_rect = shadow_text.get_rect(center=(cfg.WIDTH // 2 + self.scale_val(3), title_y + self.scale_val(3, False)))
             self.screen.blit(shadow_text, shadow_rect)
             
             # Texto principal
@@ -460,12 +471,12 @@ class TitleScreen:
     
     def draw_subtitle(self):
         """Dibuja el subtítulo"""
-        subtitle_y = cfg.HEIGHT // 2 + 50
+        subtitle_y = cfg.HEIGHT // 2 + self.scale_val(50, False)
         subtitle_text = "Bingach8 by joseAlejandro"
         
         # Sombra
         shadow = self.font_subtitle.render(subtitle_text, True, (0, 0, 0))
-        shadow_rect = shadow.get_rect(center=(cfg.WIDTH // 2 + 2, subtitle_y + 2))
+        shadow_rect = shadow.get_rect(center=(cfg.WIDTH // 2 + self.scale_val(2), subtitle_y + self.scale_val(2, False)))
         self.screen.blit(shadow, shadow_rect)
         
         # Texto principal
@@ -474,9 +485,9 @@ class TitleScreen:
         self.screen.blit(text, text_rect)
         
         # Línea decorativa
-        line_y = subtitle_y + 30
-        line_start = cfg.WIDTH // 2 - 150
-        line_end = cfg.WIDTH // 2 + 150
+        line_y = subtitle_y + self.scale_val(30, False)
+        line_start = cfg.WIDTH // 2 - self.scale_val(150)
+        line_end = cfg.WIDTH // 2 + self.scale_val(150)
         
         for i in range(3):
             alpha = int(255 * (1 - i * 0.3))
@@ -515,11 +526,11 @@ class TitleScreen:
         """Dibuja el menú de selección de modo de juego"""
         # Título del menú
         menu_title = self.font_title.render("SELECCIONA MODO", True, cfg.HIGHLIGHT_COLOR)
-        title_rect = menu_title.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT // 2 - 100))
+        title_rect = menu_title.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT // 2 - self.scale_val(100, False)))
         
         # Sombra del título
         shadow_title = self.font_title.render("SELECCIONA MODO", True, (0, 0, 0))
-        shadow_rect = shadow_title.get_rect(center=(cfg.WIDTH // 2 + 3, cfg.HEIGHT // 2 - 97))
+        shadow_rect = shadow_title.get_rect(center=(cfg.WIDTH // 2 + self.scale_val(3), cfg.HEIGHT // 2 - self.scale_val(97, False)))
         self.screen.blit(shadow_title, shadow_rect)
         self.screen.blit(menu_title, title_rect)
         
@@ -542,8 +553,8 @@ class TitleScreen:
         normal_title = self.font_button.render("JUEGO NORMAL", True, cfg.WHITE)
         normal_desc = self.font_small.render("Tablero 9x10 - Números 1 al 90", True, cfg.LIGHT_GRAY)
         
-        normal_title_rect = normal_title.get_rect(center=(self.normal_game_rect.centerx, self.normal_game_rect.centery - 15))
-        normal_desc_rect = normal_desc.get_rect(center=(self.normal_game_rect.centerx, self.normal_game_rect.centery + 15))
+        normal_title_rect = normal_title.get_rect(center=(self.normal_game_rect.centerx, self.normal_game_rect.centery - self.scale_val(15, False)))
+        normal_desc_rect = normal_desc.get_rect(center=(self.normal_game_rect.centerx, self.normal_game_rect.centery + self.scale_val(15, False)))
         
         self.screen.blit(normal_title, normal_title_rect)
         self.screen.blit(normal_desc, normal_desc_rect)
@@ -567,8 +578,8 @@ class TitleScreen:
         alt_title = self.font_button.render("JUEGO ALTERNO", True, cfg.WHITE)
         alt_desc = self.font_small.render("Tablero 7x11 - Números 1 al 75", True, cfg.LIGHT_GRAY)
         
-        alt_title_rect = alt_title.get_rect(center=(self.alt_game_rect.centerx, self.alt_game_rect.centery - 15))
-        alt_desc_rect = alt_desc.get_rect(center=(self.alt_game_rect.centerx, self.alt_game_rect.centery + 15))
+        alt_title_rect = alt_title.get_rect(center=(self.alt_game_rect.centerx, self.alt_game_rect.centery - self.scale_val(15, False)))
+        alt_desc_rect = alt_desc.get_rect(center=(self.alt_game_rect.centerx, self.alt_game_rect.centery + self.scale_val(15, False)))
         
         self.screen.blit(alt_title, alt_title_rect)
         self.screen.blit(alt_desc, alt_desc_rect)
@@ -585,7 +596,7 @@ class TitleScreen:
     
     def draw_instructions(self):
         """Dibuja las instrucciones"""
-        instructions_y = cfg.HEIGHT - 100
+        instructions_y = cfg.HEIGHT - self.scale_val(100, False)
         
         # Instrucción principal
         instruction1 = "Presiona ESPACIO, ENTER o haz clic para seleccionar modo"
@@ -596,13 +607,13 @@ class TitleScreen:
         # Instrucción de salida
         instruction2 = "Presiona ESC para salir"
         text2 = self.font_small.render(instruction2, True, cfg.GRAY)
-        rect2 = text2.get_rect(center=(cfg.WIDTH // 2, instructions_y + 25))
+        rect2 = text2.get_rect(center=(cfg.WIDTH // 2, instructions_y + self.scale_val(25, False)))
         self.screen.blit(text2, rect2)
         
         # Créditos
         credits = "Creado por Jose Alejandro"
         credits_text = self.font_small.render(credits, True, cfg.GRAY)
-        credits_rect = credits_text.get_rect(center=(cfg.WIDTH // 2, instructions_y + 50))
+        credits_rect = credits_text.get_rect(center=(cfg.WIDTH // 2, instructions_y + self.scale_val(50, False)))
         self.screen.blit(credits_text, credits_rect)
 
 # Función principal para pruebas

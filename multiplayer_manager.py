@@ -16,6 +16,7 @@ from multiplayer_server import BingachoServer, get_server_instance
 from multiplayer_client import BingachoClient, create_client, get_client_instance
 from bingo_card import BingoCard, generate_unique_cards
 from bingo_card_renderer import BingoCardRenderer
+import config as cfg
 
 class MultiplayerManager:
     """Gestiona el modo multijugador del juego"""
@@ -59,6 +60,7 @@ class MultiplayerManager:
             self.nickname = nickname
             self.server = get_server_instance()
             self.server.port = port
+            self.server.game_mode = cfg.TOTAL_NUMBERS
             
             # Iniciar servidor en un thread separado
             def run_server():
@@ -307,30 +309,11 @@ class MultiplayerManager:
 
     def broadcast_screen(self, screen):
         """
-        Captura y encola la pantalla actual. 
-        DEBE llamarse desde el hilo principal (bucle de juego).
+        No-op: El espectador web ahora renderiza el juego de forma nativa a partir
+        de los mensajes de estado del juego (JSON), reduciendo el ancho de banda
+        y consumo de red en un 99.9%.
         """
-        if not self.is_server_mode() or not self._streamer_thread:
-            return
-
-        current_time = time.time()
-        if current_time - self._last_frame_time < self._stream_interval:
-            return
-
-        self._last_frame_time = current_time
-        
-        try:
-            # Copia segura en el hilo principal
-            # Usamos copy() para crear una superficie independiente que el worker pueda usar
-            frame_copy = screen.copy()
-            
-            # Intentar poner en la cola, si está llena descartamos para no bloquear el juego
-            try:
-                self._frame_queue.put_nowait(frame_copy)
-            except queue.Full:
-                pass
-        except Exception as e:
-            print(f"Error capturando pantalla: {e}")
+        pass
 
     def _start_http_server(self, port=8080):
         """Inicia un servidor HTTP simple para servir el cliente web"""
@@ -360,7 +343,7 @@ class MultiplayerManager:
                         # Obtener el puerto WS actual del servidor
                         ws_port = manager_instance.server.port if manager_instance.server else 8765
                         
-                        response = json.dumps({"ws_port": ws_port})
+                        response = json.dumps({"ws_port": ws_port, "game_mode": manager_instance.server.game_mode if manager_instance.server else 90})
                         self.wfile.write(response.encode('utf-8'))
                     else:
                         super().do_GET()
@@ -450,7 +433,8 @@ class MultiplayerManager:
                 "nickname": self.nickname,
                 "connected_clients": len(self.server.clients) if self.server else 0,
                 "ip": local_ip,
-                "http_url": f"http://{local_ip}:{self.http_port}" if self.http_server else "Iniciando..."
+                "http_url": f"http://{local_ip}:{self.http_port}" if self.http_server else "Iniciando...",
+                "interactive_players": len(self.server.interactive_players) if self.server else 0
             }
         elif self.mode == "client":
             return {
@@ -479,6 +463,20 @@ class MultiplayerManager:
     def is_local_mode(self):
         """Verifica si está en modo local (no multijugador)"""
         return self.mode is None
+
+    def get_interactive_players_info(self):
+        """Obtiene información de los jugadores interactivos conectados"""
+        if not self.is_server_mode() or not self.server:
+            return []
+        return [
+            {
+                'nickname': info['nickname'],
+                'marked_count': len(info['card'].marked),
+                'has_line': info['card'].check_line(),
+                'has_bingo': info['card'].check_bingo()
+            }
+            for info in self.server.interactive_players.values()
+        ]
 
 
 # Instancia global del gestor

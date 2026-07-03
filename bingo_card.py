@@ -20,43 +20,111 @@ class BingoCard:
         
     def generate_card(self):
         """
-        Genera una cartilla de bingo de 5x5 con números aleatorios
-        Columnas: B(1-15), I(16-30), N(31-45), G(46-60), O(61-75)
-        Pero adaptada para 90 números del bingo español
+        Genera una cartilla de bingo de 9 columnas x 3 filas (formato bingo español tradicional)
+        que cumple con las reglas oficiales:
+        - Cada fila contiene exactamente 5 números y 4 espacios vacíos.
+        - Cada columna contiene al menos un número (evita columnas vacías).
+        - Los números en cada columna están ordenados de menor a mayor de arriba a abajo.
+        - Un total de exactamente 15 números.
         
         Returns:
-            Lista de listas con los números de la cartilla
+            Lista de listas con los números de la cartilla (None para espacios vacíos)
         """
-        # Cartilla de 5 columnas x 3 filas (formato bingo español tradicional)
-        card = []
-        
-        # Dividir los 90 números en 9 columnas (10 números por columna)
-        columns = []
-        for col in range(9):
-            start = col * 10 + 1
-            end = start + 10
-            # Seleccionar 3 números aleatorios de cada rango de 10
-            column_numbers = random.sample(range(start, end), 3)
-            column_numbers.sort()
-            columns.append(column_numbers)
-        
-        # Organizar en 3 filas, cada fila con 5 números
-        # Cada fila debe tener exactamente 5 números y 4 espacios vacíos
-        for row_idx in range(3):
-            row = []
-            # Seleccionar 5 columnas aleatorias para esta fila
-            selected_cols = random.sample(range(9), 5)
-            selected_cols.sort()
+        # Bucle de reintento hasta que encontremos una distribución válida de celdas
+        while True:
+            # 1. Decidir cuántos números colocar por columna.
+            # Cada una de las 9 columnas debe tener al menos 1 número, y máximo 3 (debido a las 3 filas).
+            # Total de números en la cartilla = 15.
+            col_counts = [1] * 9  # Comenzamos con 1 número en cada una de las 9 columnas (quedan 6 por distribuir)
             
-            for col_idx in range(9):
-                if col_idx in selected_cols:
-                    row.append(columns[col_idx][row_idx])
-                else:
-                    row.append(None)  # Espacio vacío
+            # Distribuir los 6 números restantes aleatoriamente sin exceder el máximo de 3 por columna
+            extra_pool = list(range(9))
+            random.shuffle(extra_pool)
+            extras_added = 0
+            for col_idx in extra_pool:
+                if extras_added < 6:
+                    add = random.randint(1, 2)
+                    if col_counts[col_idx] + add <= 3:
+                        if extras_added + add <= 6:
+                            col_counts[col_idx] += add
+                            extras_added += add
+                        else:
+                            needed = 6 - extras_added
+                            if col_counts[col_idx] + needed <= 3:
+                                col_counts[col_idx] += needed
+                                extras_added += needed
             
-            card.append(row)
-        
-        return card
+            # Verificar si logramos distribuir exactamente 15 celdas
+            if sum(col_counts) != 15:
+                continue
+                
+            # 2. Intentar asignar las filas de las columnas asegurando exactamente 5 números por fila
+            # Representamos la matriz de celdas activas: 3 filas x 9 columnas
+            grid = [[False] * 9 for _ in range(3)]
+            row_counts = [0, 0, 0]
+            
+            # Buscaremos una solución válida usando Backtracking de forma muy rápida
+            def solve(col):
+                if col == 9:
+                    # Condición de éxito: todas las filas deben tener exactamente 5 números
+                    return all(r == 5 for r in row_counts)
+                
+                count = col_counts[col]
+                # Todas las combinaciones posibles de filas para este recuento de columna (1, 2 o 3 celdas ocupadas)
+                import itertools
+                combos = list(itertools.combinations(range(3), count))
+                random.shuffle(combos)  # Aleatorizar para variar las cartillas
+                
+                for combo in combos:
+                    # Validar si al agregar estas filas superamos el límite de 5 números por fila
+                    if any(row_counts[r] >= 5 for r in combo):
+                        continue
+                    
+                    # Colocar
+                    for r in combo:
+                        grid[r][col] = True
+                        row_counts[r] += 1
+                        
+                    if solve(col + 1):
+                        return True
+                        
+                    # Deshacer (Backtrack)
+                    for r in combo:
+                        grid[r][col] = False
+                        row_counts[r] -= 1
+                        
+                return False
+            
+            # Si encontramos una distribución de celdas válida, procedemos a llenarla con números
+            if solve(0):
+                card = [[None] * 9 for _ in range(3)]
+                for col in range(9):
+                    # Asignar los rangos oficiales de números para cada columna en el bingo español:
+                    # Columna 1 (0): 1-9 (9 números)
+                    # Columnas 2-8 (1-7): decenas completas (ej. Col 2: 10-19, Col 3: 20-29, etc.)
+                    # Columna 9 (8): 80-90 (11 números)
+                    if col == 0:
+                        start_num = 1
+                        end_num = 9
+                    elif col == 8:
+                        start_num = 80
+                        end_num = 90
+                    else:
+                        start_num = col * 10
+                        end_num = start_num + 9
+                        
+                    # Obtener números ordenados únicos para esta columna
+                    num_needed = col_counts[col]
+                    column_numbers = random.sample(range(start_num, end_num + 1), num_needed)
+                    column_numbers.sort()
+                    
+                    # Colocar en la cartilla
+                    placed = 0
+                    for row in range(3):
+                        if grid[row][col]:
+                            card[row][col] = column_numbers[placed]
+                            placed += 1
+                return card
     
     def mark_number(self, number):
         """

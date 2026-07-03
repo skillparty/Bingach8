@@ -25,22 +25,38 @@ class ModeSelection:
         self.is_entering_server_ip = False
         self.error_message = ""
         
-        # Configurar fuentes
-        self.title_font = cfg.get_font(80, bold=True)
-        self.button_font = cfg.get_font(36, bold=True)
-        self.input_font = cfg.get_font(32)
-        self.subtitle_font = cfg.get_font(28)
+        # Factores de escala basados en resolución base
+        self.scale_x = cfg.WIDTH / 1024
+        self.scale_y = cfg.HEIGHT / 768
+        
+        # Configurar fuentes con escala
+        self.title_font = cfg.get_font(self.scale_val(80), bold=True)
+        self.button_font = cfg.get_font(self.scale_val(36), bold=True)
+        self.input_font = cfg.get_font(self.scale_val(32))
+        self.subtitle_font = cfg.get_font(self.scale_val(28))
         
         # Posiciones de botones
         self.setup_buttons()
+        
+    def scale_val(self, val, is_horizontal=True, min_val=None, max_val=None):
+        """Escala valores en base a la resolución actual"""
+        if is_horizontal:
+            scaled = int(val * self.scale_x)
+        else:
+            scaled = int(val * self.scale_y)
+        if min_val is not None:
+            scaled = max(scaled, min_val)
+        if max_val is not None:
+            scaled = min(scaled, max_val)
+        return scaled
     
     def setup_buttons(self):
-        """Configura los rectángulos de los botones"""
-        button_width = 500
-        button_height = 80
+        """Configura los rectángulos de los botones con escalado dinámico"""
+        button_width = self.scale_val(500)
+        button_height = self.scale_val(80, False)
         center_x = cfg.WIDTH // 2
-        start_y = cfg.HEIGHT // 2 - 100
-        spacing = 120
+        start_y = cfg.HEIGHT // 2 - self.scale_val(100, False)
+        spacing = self.scale_val(120, False)
         
         self.local_button = pygame.Rect(
             center_x - button_width // 2,
@@ -64,42 +80,52 @@ class ModeSelection:
         )
         
         # Botones para la pantalla de configuración
-        self.back_button = pygame.Rect(50, cfg.HEIGHT - 100, 150, 60)
-        self.start_button = pygame.Rect(cfg.WIDTH - 200, cfg.HEIGHT - 100, 150, 60)
+        self.back_button = pygame.Rect(
+            self.scale_val(50), 
+            cfg.HEIGHT - self.scale_val(100, False), 
+            self.scale_val(150), 
+            self.scale_val(60, False)
+        )
+        self.start_button = pygame.Rect(
+            cfg.WIDTH - self.scale_val(200), 
+            cfg.HEIGHT - self.scale_val(100, False), 
+            self.scale_val(150), 
+            self.scale_val(60, False)
+        )
         
         # Campo de entrada de texto
-        input_width = 600
-        input_height = 60
+        input_width = self.scale_val(600)
+        input_height = self.scale_val(60, False)
         self.nickname_input = pygame.Rect(
             center_x - input_width // 2,
-            cfg.HEIGHT // 2 - 120,
+            cfg.HEIGHT // 2 - self.scale_val(120, False),
             input_width,
             input_height
         )
         
         self.server_ip_input = pygame.Rect(
             center_x - input_width // 2,
-            cfg.HEIGHT // 2 + 80,
+            cfg.HEIGHT // 2 + self.scale_val(80, False),
             input_width,
             input_height
         )
         
         # Botones de modo de juego (Normal/Alterno)
-        mode_button_width = 280
-        mode_button_height = 60
-        mode_spacing = 40
+        mode_button_width = self.scale_val(280)
+        mode_button_height = self.scale_val(60, False)
+        mode_spacing = self.scale_val(40)
         mode_start_x = center_x - mode_button_width - mode_spacing // 2
         
         self.normal_mode_button = pygame.Rect(
             mode_start_x,
-            cfg.HEIGHT // 2 + 20,
+            cfg.HEIGHT // 2 + self.scale_val(20, False),
             mode_button_width,
             mode_button_height
         )
         
         self.alt_mode_button = pygame.Rect(
             mode_start_x + mode_button_width + mode_spacing,
-            cfg.HEIGHT // 2 + 20,
+            cfg.HEIGHT // 2 + self.scale_val(20, False),
             mode_button_width,
             mode_button_height
         )
@@ -111,12 +137,12 @@ class ModeSelection:
         
         # Título
         title_text = self.title_font.render("BINGACHO", True, cfg.PRIMARY_COLOR)
-        title_rect = title_text.get_rect(center=(cfg.WIDTH // 2, 150))
+        title_rect = title_text.get_rect(center=(cfg.WIDTH // 2, self.scale_val(150, False)))
         self.screen.blit(title_text, title_rect)
         
         # Subtítulo
         subtitle_text = self.subtitle_font.render("Selecciona el modo de juego", True, cfg.TEXT_COLOR)
-        subtitle_rect = subtitle_text.get_rect(center=(cfg.WIDTH // 2, 250))
+        subtitle_rect = subtitle_text.get_rect(center=(cfg.WIDTH // 2, self.scale_val(250, False)))
         self.screen.blit(subtitle_text, subtitle_rect)
         
         # Botones
@@ -174,12 +200,12 @@ class ModeSelection:
         
         # Texto principal
         text_surface = self.button_font.render(text, True, cfg.TEXT_COLOR)
-        text_rect = text_surface.get_rect(center=(rect.centerx, rect.centery - 10))
+        text_rect = text_surface.get_rect(center=(rect.centerx, rect.centery - self.scale_val(10, False)))
         self.screen.blit(text_surface, text_rect)
         
         # Subtítulo
         subtitle_surface = self.subtitle_font.render(subtitle, True, cfg.SUBTITLE_COLOR)
-        subtitle_rect = subtitle_surface.get_rect(center=(rect.centerx, rect.centery + 25))
+        subtitle_rect = subtitle_surface.get_rect(center=(rect.centerx, rect.centery + self.scale_val(25, False)))
         self.screen.blit(subtitle_surface, subtitle_rect)
     
     def draw_config_screen(self):
@@ -199,18 +225,19 @@ class ModeSelection:
             subtitle = "Ingresa tu nickname y la IP del servidor"
         
         title_text = self.title_font.render(title, True, cfg.PRIMARY_COLOR)
-        title_rect = title_text.get_rect(center=(cfg.WIDTH // 2, 150))
+        title_rect = title_text.get_rect(center=(cfg.WIDTH // 2, self.scale_val(150, False)))
         self.screen.blit(title_text, title_rect)
         
+        # Subtítulo
         subtitle_text = self.subtitle_font.render(subtitle, True, cfg.TEXT_COLOR)
-        subtitle_rect = subtitle_text.get_rect(center=(cfg.WIDTH // 2, 250))
+        subtitle_rect = subtitle_text.get_rect(center=(cfg.WIDTH // 2, self.scale_val(250, False)))
         self.screen.blit(subtitle_text, subtitle_rect)
         
         # Campo de nickname
         if self.selected_mode != "local":
             nickname_label = self.subtitle_font.render("Nickname:", True, cfg.TEXT_COLOR)
             nickname_label_rect = nickname_label.get_rect(
-                bottomleft=(self.nickname_input.left, self.nickname_input.top - 10)
+                bottomleft=(self.nickname_input.left, self.nickname_input.top - self.scale_val(10, False))
             )
             self.screen.blit(nickname_label, nickname_label_rect)
             
@@ -233,7 +260,7 @@ class ModeSelection:
             nickname_display = self.nickname + ("|" if self.is_entering_nickname else "")
             nickname_text = self.input_font.render(nickname_display, True, cfg.TEXT_COLOR)
             nickname_text_rect = nickname_text.get_rect(
-                midleft=(self.nickname_input.left + 20, self.nickname_input.centery)
+                midleft=(self.nickname_input.left + self.scale_val(20), self.nickname_input.centery)
             )
             self.screen.blit(nickname_text, nickname_text_rect)
         
@@ -270,10 +297,10 @@ class ModeSelection:
             normal_title = self.subtitle_font.render("NORMAL", True, cfg.TEXT_COLOR)
             normal_desc = self.input_font.render("90 números (9x10)", True, cfg.LIGHT_GRAY)
             normal_title_rect = normal_title.get_rect(
-                center=(self.normal_mode_button.centerx, self.normal_mode_button.centery - 12)
+                center=(self.normal_mode_button.centerx, self.normal_mode_button.centery - self.scale_val(12, False))
             )
             normal_desc_rect = normal_desc.get_rect(
-                center=(self.normal_mode_button.centerx, self.normal_mode_button.centery + 12)
+                center=(self.normal_mode_button.centerx, self.normal_mode_button.centery + self.scale_val(12, False))
             )
             self.screen.blit(normal_title, normal_title_rect)
             self.screen.blit(normal_desc, normal_desc_rect)
@@ -300,10 +327,10 @@ class ModeSelection:
             alt_title = self.subtitle_font.render("ALTERNO", True, cfg.TEXT_COLOR)
             alt_desc = self.input_font.render("75 números (7x11)", True, cfg.LIGHT_GRAY)
             alt_title_rect = alt_title.get_rect(
-                center=(self.alt_mode_button.centerx, self.alt_mode_button.centery - 12)
+                center=(self.alt_mode_button.centerx, self.alt_mode_button.centery - self.scale_val(12, False))
             )
             alt_desc_rect = alt_desc.get_rect(
-                center=(self.alt_mode_button.centerx, self.alt_mode_button.centery + 12)
+                center=(self.alt_mode_button.centerx, self.alt_mode_button.centery + self.scale_val(12, False))
             )
             self.screen.blit(alt_title, alt_title_rect)
             self.screen.blit(alt_desc, alt_desc_rect)
@@ -312,7 +339,7 @@ class ModeSelection:
         if self.selected_mode == "client":
             server_label = self.subtitle_font.render("IP del Servidor:", True, cfg.TEXT_COLOR)
             server_label_rect = server_label.get_rect(
-                bottomleft=(self.server_ip_input.left, self.server_ip_input.top - 10)
+                bottomleft=(self.server_ip_input.left, self.server_ip_input.top - self.scale_val(10, False))
             )
             self.screen.blit(server_label, server_label_rect)
             
@@ -335,14 +362,14 @@ class ModeSelection:
             ip_display = self.server_ip + ("|" if self.is_entering_server_ip else "")
             ip_text = self.input_font.render(ip_display, True, cfg.TEXT_COLOR)
             ip_text_rect = ip_text.get_rect(
-                midleft=(self.server_ip_input.left + 20, self.server_ip_input.centery)
+                midleft=(self.server_ip_input.left + self.scale_val(20), self.server_ip_input.centery)
             )
             self.screen.blit(ip_text, ip_text_rect)
         
         # Mensaje de error si existe
         if self.error_message:
             error_text = self.subtitle_font.render(self.error_message, True, cfg.RED)
-            error_rect = error_text.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT - 200))
+            error_rect = error_text.get_rect(center=(cfg.WIDTH // 2, cfg.HEIGHT - self.scale_val(200, False)))
             self.screen.blit(error_text, error_rect)
         
         # Botones
